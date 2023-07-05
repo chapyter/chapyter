@@ -22,6 +22,9 @@
        It will call gpt-4-0613 to generate the python code for listing all the files in the folder, and 
        execute the generated code automatically. **In this case, this plugin serves as the interpreter that**
        **translates the natural language to python code and execute it.** 
+
+3. Examples: 
+    - [examples/starter.ipynb](examples/starter.ipynb) A starter notebook illustrating the basic functions of `chapyter`. 
     
 ## Development Notes
 
