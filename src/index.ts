@@ -2,8 +2,11 @@ import {
   JupyterFrontEnd,
   JupyterFrontEndPlugin
 } from '@jupyterlab/application';
-import { INotebookTracker } from '@jupyterlab/notebook';
-import { NotebookActions } from '@jupyterlab/notebook';
+import {
+  INotebookTracker,
+  NotebookActions,
+  Notebook
+} from '@jupyterlab/notebook';
 import { CodeCell, Cell, isCodeCellModel } from '@jupyterlab/cells';
 
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
@@ -30,7 +33,7 @@ function isCellNotGenerated(cell: Cell): boolean {
 /**
  * Iterate through the notebook and find the cell with the given ID
  */
-function findCellById(notebook: any, id: string): Cell | null {
+function findCellById(notebook: Notebook, id: string): Cell | null {
   for (let i = 0; i < notebook.widgets.length; i++) {
     let cell = notebook.widgets[i];
     if (cell.model.id === id) {
@@ -38,6 +41,38 @@ function findCellById(notebook: any, id: string): Cell | null {
     }
   }
   return null;
+}
+
+function findCellIndexById(notebook: Notebook, id: string): number {
+  for (let i = 0; i < notebook.widgets.length; i++) {
+    let cell = notebook.widgets[i];
+    if (cell.model.id === id) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function selectCellById(notebook: Notebook, id: string): void {
+  let activeCellIndex = notebook.activeCellIndex;
+  let targetCellIndex = findCellIndexById(notebook, id);
+  if (targetCellIndex !== -1) {
+    if (activeCellIndex !== targetCellIndex) {
+      if (activeCellIndex < targetCellIndex) {
+        for (let i = activeCellIndex; i < targetCellIndex; i++) {
+          if (!notebook.widgets[i].inputHidden) {
+            NotebookActions.selectBelow(notebook);
+          }
+        }
+      } else {
+        for (let i = activeCellIndex; i > targetCellIndex; i--) {
+          if (!notebook.widgets[i].inputHidden) {
+            NotebookActions.selectAbove(notebook);
+          }
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -100,8 +135,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
             }
 
             NotebookActions.run(notebook.content, notebook.sessionContext);
-            NotebookActions.hideCode(notebook.content);
-            NotebookActions.selectBelow(notebook.content);
 
             /**
              * We want to run the next check for avoiding duplicate cells.
@@ -146,13 +179,17 @@ const plugin: JupyterFrontEndPlugin<void> = {
               let linkedCell = findCellById(notebook.content, linkedCellId);
               if (linkedCell) {
                 console.log('Linked cell:', linkedCell);
-                NotebookActions.deselectAll(notebook.content);
-                notebook.content.select(linkedCell);
-                NotebookActions.showCode(notebook.content);
-                NotebookActions.selectAbove(notebook.content);
+
+                linkedCell.inputHidden = false;
+                selectCellById(notebook.content, linkedCellId);
                 NotebookActions.deleteCells(notebook.content);
+
+                selectCellById(notebook.content, newCell.model.id);
               }
             }
+
+            NotebookActions.hideCode(notebook.content);
+            NotebookActions.selectBelow(notebook.content);
 
             // set the proper linked cell ID
             codeCell.model.setMetadata('ChapyterCell', {
