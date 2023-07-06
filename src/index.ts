@@ -9,7 +9,7 @@ import { CodeCell, Cell, isCodeCellModel } from '@jupyterlab/cells';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
 
 type ChapyterCellMetaData = {
-  linkedCellID?: string;
+  linkedCellId?: string;
   cellType: 'generated' | 'original';
 };
 
@@ -95,7 +95,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
             if (newCell) {
               newCell.model.setMetadata('ChapyterCell', {
                 cellType: 'generated',
-                linkedCellID: codeCell.model.id // the original cell ID
+                linkedCellId: codeCell.model.id // the original cell ID
               });
             }
 
@@ -123,7 +123,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
              * for executing the next cell.
              */
             let linkedCellId =
-              codeCell.model.getMetadata('ChapyterCell')?.linkedCellID;
+              codeCell.model.getMetadata('ChapyterCell')?.linkedCellId;
             if (linkedCellId) {
               console.log('Linked cell ID:', linkedCellId);
 
@@ -157,7 +157,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
             // set the proper linked cell ID
             codeCell.model.setMetadata('ChapyterCell', {
               cellType: 'original',
-              linkedCellID: newCell.model.id
+              linkedCellId: newCell.model.id
             });
           }
         }
