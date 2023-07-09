@@ -8,9 +8,8 @@ import {
   Notebook
 } from '@jupyterlab/notebook';
 import { CodeCell, Cell, isCodeCellModel } from '@jupyterlab/cells';
-import { ISettingRegistry } from '@jupyterlab/settingregistry';
 
-type ChapyterCellMetaData = {
+type ChapyterCellMetadata = {
   linkedCellId?: string;
   cellType: 'generated' | 'original';
 };
@@ -21,7 +20,7 @@ type ChapyterCellMetaData = {
 function isCellNotGenerated(cell: Cell): boolean {
   if (isCodeCellModel(cell.model)) {
     let metadata =
-      (cell.model.getMetadata('ChapyterCell') as ChapyterCellMetaData) || null;
+      (cell.model.getMetadata('ChapyterCell') as ChapyterCellMetadata) || null;
     if (metadata && metadata.cellType === 'generated') {
       return false;
     }
@@ -66,7 +65,7 @@ function findCellByTemplateString(
     }
   }
   return null;
-};
+}
 
 /**
  * Find the index of the cell with the given ID
@@ -79,11 +78,11 @@ function findCellIndexById(notebook: Notebook, id: string): number {
     }
   }
   return -1;
-};
+}
 
 /**
- * Select the target cell based on its id by moving the cursor 
- * (using NotebookActions.selectAbove or NotebookActions.selectAbove). 
+ * Select the target cell based on its id by moving the cursor
+ * (using NotebookActions.selectAbove or NotebookActions.selectAbove).
  */
 function selectCellById(notebook: Notebook, id: string): void {
   let activeCellIndex = notebook.activeCellIndex;
@@ -105,7 +104,7 @@ function selectCellById(notebook: Notebook, id: string): void {
       }
     }
   }
-};
+}
 
 /**
  * Check if the code cell is a Chapyter magic cell
@@ -119,13 +118,12 @@ function isCellChapyterMagicCell(cell: CodeCell): boolean {
     }
   }
   return false;
-};
+}
 
 /**
  * Delete the cell from the notebook
  */
 function deleteCell(notebook: Notebook, cell: Cell): void {
-  console.log('Deleting cell:', cell);
   const model = notebook.model!;
   const sharedModel = model.sharedModel;
   const toDelete: number[] = [];
@@ -161,7 +159,7 @@ function deleteCell(notebook: Notebook, cell: Cell): void {
   // Deselect any remaining, undeletable cells. Do this even if we don't
   // delete anything so that users are aware *something* happened.
   notebook.deselectAll();
-};
+}
 
 /**
  * Initialization data for the @shannon-shen/chapyter extension.
@@ -171,16 +169,15 @@ const plugin: JupyterFrontEndPlugin<void> = {
   description: 'A Natural Language-Based Python Program Interpreter',
   autoStart: true,
   requires: [INotebookTracker],
-  optional: [ISettingRegistry],
+  // optional: [ISettingRegistry],
   activate: (app: JupyterFrontEnd, tracker: INotebookTracker) => {
     NotebookActions.executed.connect((sender, args) => {
-      if (args.success && isCellNotGenerated(args.cell)) {
-
+      if (args.success) {
         // It must be true that the cell is a code cell (otherwise it would not have been executed)
         let codeCell = args.cell as CodeCell;
 
         // We only want to automatically generate a new cell if the code cell starts with a magic command (e.g. %chat)
-        if (isCellChapyterMagicCell(codeCell)) {
+        if (isCellChapyterMagicCell(codeCell) && isCellNotGenerated(codeCell)) {
           // this is the original code cell that was executed
           if (codeCell.model.getMetadata('ChapyterCell') === undefined) {
             codeCell.model.setMetadata('ChapyterCell', {
@@ -191,21 +188,22 @@ const plugin: JupyterFrontEndPlugin<void> = {
           // because it is successfully executed
           let notebook = tracker.currentWidget;
           if (notebook) {
-
             let newCell = findCellByTemplateString(
               notebook.content,
               codeCell.model.executionCount
             );
-            
+
             if (newCell) {
               newCell.model.setMetadata('ChapyterCell', {
                 cellType: 'generated',
                 linkedCellId: codeCell.model.id // the original cell ID
               });
-              
+
               selectCellById(notebook.content, newCell.model.id);
               NotebookActions.run(notebook.content, notebook.sessionContext);
-              
+
+              // The removal of existing linked cells is handled in the executionScheduled event
+
               /**
                * We want to run the next check for avoiding duplicate cells.
                * Imagine when we are redistributing the notebook: we have already run the
@@ -225,23 +223,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
                * will move up (instead of moving down) the active cell and it will confuse the logic
                * for executing the next cell.
                */
-              
-              let linkedCellId =
-                codeCell.model.getMetadata('ChapyterCell')?.linkedCellId;
-              
-                if (linkedCellId) {
 
-                  let linkedCell = findCellById(notebook.content, linkedCellId);
-                  if (linkedCell) {
-                    console.log('Linked cell:', linkedCell);
-
-                    linkedCell.inputHidden = false;
-                    deleteCell(notebook.content, linkedCell);
-
-                    selectCellById(notebook.content, newCell.model.id);
-                  }
-              } 
-              
               newCell.inputHidden = true;
               NotebookActions.selectBelow(notebook.content);
 
@@ -250,6 +232,30 @@ const plugin: JupyterFrontEndPlugin<void> = {
                 cellType: 'original',
                 linkedCellId: newCell.model.id
               });
+            }
+          }
+        }
+      }
+    });
+
+    NotebookActions.executionScheduled.connect((sender, args) => {
+      console.log('Execution scheduled for cell:', args.cell);
+      // It must be true that the cell is a code cell (otherwise it would not have been executed)
+      let codeCell = args.cell as CodeCell;
+
+      // We want to automatically remove existing generated cells if we are running the chapyter cell
+      if (isCellChapyterMagicCell(codeCell) && isCellNotGenerated(codeCell)) {
+        let linkedCellId =
+          codeCell.model.getMetadata('ChapyterCell')?.linkedCellId;
+
+        let notebook = tracker.currentWidget;
+        if (notebook) {
+          if (linkedCellId) {
+            console.log('linkedCellId', linkedCellId);
+            let linkedCell = findCellById(notebook.content, linkedCellId);
+            if (linkedCell) {
+              console.log('removing', linkedCellId);
+              deleteCell(notebook.content, linkedCell);
             }
           }
         }
