@@ -19,12 +19,18 @@ from IPython.core.magic_arguments import (  # type: ignore
     parse_argstring,
 )
 
-from .programs import _DEFAULT_HISTORY_PROGRAM, _DEFAULT_PROGRAM, ChapyterAgentProgram
+from .programs import (
+    _DEFAULT_CHATONLY_PROGRAM,
+    _DEFAULT_HISTORY_PROGRAM,
+    _DEFAULT_PROGRAM,
+    ChapyterAgentProgram,
+)
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_PROGRAM_NAME = "_default"
 _DEFAULT_HISTORY_PROGRAM_NAME = "_default_history"
+_DEFAULT_CHATONLY_PROGRAM_NAME = "_default_chatonly"
 
 
 @dataclasses.dataclass
@@ -35,6 +41,7 @@ class ChapyterAgentConfig:
     # Program Configs
     default_program: str = _DEFAULT_PROGRAM_NAME
     default_history_program: str = _DEFAULT_HISTORY_PROGRAM_NAME
+    default_chatonly_program: str = _DEFAULT_CHATONLY_PROGRAM_NAME
 
 
 class ChapyterAgent:
@@ -46,6 +53,7 @@ class ChapyterAgent:
         for program_name, program in [
             (_DEFAULT_PROGRAM_NAME, _DEFAULT_PROGRAM),
             (_DEFAULT_HISTORY_PROGRAM_NAME, _DEFAULT_HISTORY_PROGRAM),
+            (_DEFAULT_CHATONLY_PROGRAM_NAME, _DEFAULT_CHATONLY_PROGRAM),
         ]:
             self.register_program(program_name, program)
 
@@ -70,8 +78,10 @@ class ChapyterAgent:
             raise ValueError(f"Program {program_name} not found.")
         return self._programs[program_name]
 
-    def get_program(self, args) -> ChapyterAgentProgram:
+    def get_program(self, args, chatonly: bool = False) -> ChapyterAgentProgram:
         if args.program is None:
+            if chatonly:
+                return self._get_program(self.config.default_chatonly_program)
             if not args.history:
                 return self._get_program(self.config.default_program)
             else:
@@ -100,7 +110,7 @@ class ChapyterAgent:
         shell: InteractiveShell,
         **kwargs,
     ):
-        program = self.get_program(args)
+        program = self.get_program(args, kwargs.get("chatonly", False))
         llm = self.load_model(args, program)
 
         response = program.execute(
@@ -199,8 +209,10 @@ class Chapyter(Magics):
             return
         current_message = cell
 
-        program_out = self.agent.execute_chat(current_message, args, self.shell)
-        return program_out
+        program_out = self.agent.execute_chat(
+            current_message, args, self.shell, chatonly=True
+        )
+        print(program_out)
 
     @line_magic
     def chapyter_load_agent(self, line=None):

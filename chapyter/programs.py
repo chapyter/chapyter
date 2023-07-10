@@ -93,7 +93,7 @@ Sounds good.
 MARKDOWN_CODE_PATTERN = re.compile(r"`{3}([\w]*)\n([\S\s]+?)\n`{3}")
 
 
-def clean_response_str(raw_response_str: str, shell: InteractiveShell, **kwargs):
+def clean_response_str(raw_response_str: str):
     all_code_spans = []
     for match in MARKDOWN_CODE_PATTERN.finditer(raw_response_str):
         all_code_spans.append(match.span(2))
@@ -139,7 +139,7 @@ _DEFAULT_PROGRAM = ChapyterAgentProgram(
     post_call_hooks={
         "extract_markdown_code": (
             lambda raw_response_str, shell, **kwargs: clean_response_str(
-                raw_response_str["code"], shell, **kwargs
+                raw_response_str["code"]
             )
         )
     },
@@ -232,8 +232,34 @@ _DEFAULT_HISTORY_PROGRAM = ChapyterAgentProgram(
     post_call_hooks={
         "extract_markdown_code": (
             lambda raw_response_str, shell, **kwargs: clean_response_str(
-                raw_response_str["code"], shell, **kwargs
+                raw_response_str["code"]
             )
         )
     },
+)
+
+
+default_chatonly_guidance_program = guidance(
+    """
+{{#system~}}
+You are a helpful assistant that helps people find information.
+{{~/system}}
+
+{{#user~}}
+{{current_message}}
+{{~/user}}
+
+{{#assistant~}}
+{{gen "response" max_tokens=1024}}
+{{~/assistant}}
+"""
+)
+
+
+_DEFAULT_CHATONLY_PROGRAM = ChapyterAgentProgram(
+    guidance_program=default_chatonly_guidance_program,
+    pre_call_hooks={
+        "wrap_to_dict": (lambda x, shell, **kwargs: {"current_message": x})
+    },
+    post_call_hooks={"extract_response": (lambda x, shell, **kwargs: x["response"])},
 )
