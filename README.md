@@ -1,8 +1,13 @@
 <div align="center">
   <img src="https://github.com/chapyter/chapyter/raw/main/.github/chapyter-logo.png" alt="Chapyter Logo" width="35%">
   <h3 align="center">
-  Chapyter is a jupyterlab extension that enables NL"P" -- Natural Language-based Programming. 
+  Chapyter is a jupyterlab extension for NL"P": Natural Language-based Programming
   </h3>
+</div>
+
+## Demo 
+<div align="center">
+<img src="https://github.com/chapyter/chapyter/raw/main/.github/chapyter-starter.png" alt="Chapyter Starter Demo" width="75%">
 </div>
 
 ## Quick Start
