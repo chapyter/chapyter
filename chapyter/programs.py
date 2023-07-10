@@ -121,7 +121,7 @@ def clean_response_str(raw_response_str: str, shell: InteractiveShell, **kwargs)
         all_converted_str.extend([non_code_str, code_str])
 
     last_non_code_str = [
-        f"#{ele}"
+        f"# {ele}"
         for ele in raw_response_str[cur_pos:].split("\n")
         if not ele.startswith("```") and ele.strip()
     ]
@@ -145,18 +145,15 @@ _DEFAULT_PROGRAM = ChapyterAgentProgram(
     },
 )
 
-python_interpreter_guidance_program = guidance(
+default_coding_history_guidance_program = guidance(
     """
 {{#system~}}
 You are a helpful assistant to help with an python programmer.
 {{~/system}}
 
 {{#user~}}
-Here is my python coding environment:
+Here is my python code so far:
 {{code_history}}
->>> %%chat
-... {{current_prompt}}
-Complete the code in a format like the one above.
 {{~/user}}
 
 {{#assistant~}}
@@ -164,17 +161,12 @@ Complete the code in a format like the one above.
 {{~/assistant}}
 """
 )
+# we don't need to add the {{current_instruction}} below {{code_history}}
+# in the template above, because after executing the current chapyter cell,
+# the instruction will be added to the history already.
 
 
-def get_execution_history(
-    ipython, print_nums=False, pyprompts=True, get_output=True, width=4
-):
-    def _format_lineno(session, line):
-        """Helper function to format line numbers properly."""
-        if session in (0, ipython.history_manager.session_number):
-            return str(line)
-        return "%s/%s" % (session, line)
-
+def get_execution_history(ipython, get_output=True, width=4):
     def limit_output(output, limit=100):
         """Limit the output to a certain number of words."""
         words = output.split()
@@ -185,7 +177,6 @@ def get_execution_history(
     hist = ipython.history_manager.get_range_by_str(
         " ".join([]), True, output=get_output
     )
-    # hist = ipython.history_manager.search(r"*", raw=True, output=get_output, n=100, unique=True)
 
     history_strs = []
     for session, lineno, inline in hist:
@@ -200,26 +191,17 @@ def get_execution_history(
         pattern = r"# Assistant Code for Cell \[\d+\]:"
         inline = re.sub(pattern, "", inline).strip()
 
-        multiline = "\n" in inline
-        line_sep = "\n" if multiline else " "
-
-        if print_nums:
-            history_str = history_str + "%s:%s" % (
-                _format_lineno(session, lineno).rjust(width),
-                line_sep,
-            )
-
-        if pyprompts:
-            history_str = history_str + ">>> "
-            if multiline:
-                inline = "\n... ".join(inline.splitlines()) + "\n..."
-
-        history_str = history_str + inline
+        if inline.startswith("%%chat"):
+            inline = "\n".join(inline.splitlines()[1:])
+            inline = inline.strip()
+            history_str = history_str + inline
+        else:
+            history_str = history_str + "```\n" + inline + "\n```"
 
         if get_output and output:
-            history_str += "\n" + limit_output(output.strip())
+            history_str += "\nOutput:\n" + limit_output(output.strip())
 
-        history_strs.append(history_str)
+        history_strs.append(history_str + "\n")
     return "\n".join(history_strs)
 
 
@@ -239,19 +221,18 @@ def clean_response_str_in_interpreter(raw_response_str):
 
 
 _DEFAULT_HISTORY_PROGRAM = ChapyterAgentProgram(
-    guidance_program=python_interpreter_guidance_program,
+    guidance_program=default_coding_history_guidance_program,
     pre_call_hooks={
         "add_execution_history": (
             lambda raw_message, shell, **kwargs: {
                 "code_history": get_execution_history(shell),
-                "current_prompt": raw_message,
             }
         )
     },
     post_call_hooks={
-        "clean_response_str": (
-            lambda raw_response_str, shell, **kwargs: clean_response_str_in_interpreter(
-                raw_response_str["code"]
+        "extract_markdown_code": (
+            lambda raw_response_str, shell, **kwargs: clean_response_str(
+                raw_response_str["code"], shell, **kwargs
             )
         )
     },
