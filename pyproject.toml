@@ -23,7 +23,8 @@ classifiers = [
 ]
 dependencies = [
     "guidance", 
-    "jupyterlab>=4.0"
+    "jupyterlab>=4.0",
+    "python-dotenv",
 ]
 dynamic = ["version", "description", "authors", "urls", "keywords"]
 

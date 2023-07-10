@@ -4,6 +4,7 @@ import logging
 import os
 from typing import Any, Optional, Union
 
+import dotenv
 import guidance
 from IPython.core.interactiveshell import InteractiveShell
 from IPython.core.magic import (  # type: ignore
@@ -123,6 +124,10 @@ class Chapyter(Magics):
 
         if agent is None:
             self.agent: ChapyterAgent = ChapyterAgent()
+
+        if os.path.exists(".env"):
+            dotenv.load_dotenv(".env")
+            logger.info(f"Loaded .env file in the current directory ({os.getcwd()}).")
 
     @magic_arguments()
     @argument(
