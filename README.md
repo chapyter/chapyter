@@ -1,6 +1,9 @@
-# Chapyter 
-
-> Natural Language-based Programming 
+<div align="center">
+  <img src="https://github.com/chapyter/chapyter/raw/main/.github/chapyter-logo.png" alt="Chapyter Logo" width="35%">
+  <h3 align="center">
+  Chapyter is a jupyterlab extension that enables NL"P" -- Natural Language-based Programming. 
+  </h3>
+</div>
 
 ## Quick Start
  
@@ -11,7 +14,7 @@
     ```
     Note: It will upgrade the jupyterlab to ≥ 4.0. It might break your environments. 
 
-2. Usage: Natural Language-based Programming. 
+2. Usage: see [examples/starter.ipynb](examples/starter.ipynb) for a starter notebook. 
 
     1. Set the proper `OPENAI_API_KEY` and `OPENAI_ORGANIZATION` in the environment variable 
     2. Use the magic command `%%chat` in a code cell: 
