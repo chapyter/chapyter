@@ -1,11 +1,13 @@
-import json
+import argparse
+import dataclasses
+import logging
 import os
-import re
+from typing import Any, Optional, Union
 
 import guidance
+from IPython.core.interactiveshell import InteractiveShell
 from IPython.core.magic import (  # type: ignore
     Magics,
-    cell_magic,
     line_cell_magic,
     line_magic,
     magics_class,
@@ -16,107 +18,132 @@ from IPython.core.magic_arguments import (  # type: ignore
     parse_argstring,
 )
 
+from .programs import _DEFAULT_HISTORY_PROGRAM, _DEFAULT_PROGRAM, ChapyterAgentProgram
 
-def load_model(model_name: str):
-    model = guidance.llms.OpenAI(
-        model_name, organization=os.environ["OPENAI_ORGANIZATION"]
-    )
-    return model
+logger = logging.getLogger(__name__)
 
-
-MARKDOWN_CODE_PATTERN = re.compile(r"`{3}([\w]*)\n([\S\s]+?)\n`{3}")
-DEFAULT_PROGRAM = guidance(
-    """
-{{#system~}}
-You are a helpful and assistant and you are chatting with an python programmer.
-
-{{~/system}}
-
-{{#user~}}
-From now on, you are ought to generate only the python code based on the description from the programmer.
-{{~/user}}
-
-{{#assistant~}}
-Ok, I will do that. Let's do a practice round.
-{{~/assistant}}
-
-{{#user~}}
-Load the json file called orca.json
-{{~/user}}
-
-{{#assistant~}}
-import json 
-with open('orca.json') as file:
-    data = json.load(file)
-{{~/assistant}}
-
-{{#user~}}
-That was great, now let's do another one.
-{{~/user}}
-
-{{#assistant~}}
-Sounds good.
-{{~/assistant}}
-
-{{#user~}}
-{{current_message}}
-{{~/user}}
-
-{{#assistant~}}
-{{gen 'code' temperature=0 max_tokens=2048}}
-{{~/assistant}}
-"""
-)
+_DEFAULT_PROGRAM_NAME = "_default"
+_DEFAULT_HISTORY_PROGRAM_NAME = "_default_history"
 
 
-def clean_response_str(raw_response_str: str, execution_id: int):
-    all_code_spans = []
-    for match in MARKDOWN_CODE_PATTERN.finditer(raw_response_str):
-        all_code_spans.append(match.span(2))
-    cur_pos = 0
-    all_converted_str = []
-    for cur_start, cur_end in all_code_spans:
-        non_code_str = raw_response_str[cur_pos:cur_start]
-        non_code_str = "\n".join(
-            [f"# Assistant Code for Cell [{execution_id}]:"]
-            + [
-                f"# {ele}"
-                for ele in non_code_str.split("\n")
-                if not ele.startswith("```") and ele.strip()
-            ]
+@dataclasses.dataclass
+class ChapyterAgentConfig:
+    default_model: str = "gpt-4"
+    assistance_code_hide: str = True
+
+    # Program Configs
+    default_program: str = _DEFAULT_PROGRAM_NAME
+    default_history_program: str = _DEFAULT_HISTORY_PROGRAM_NAME
+
+
+class ChapyterAgent:
+    def __init__(self, config: ChapyterAgentConfig = None):
+        self.config = config or ChapyterAgentConfig()
+        self._programs = {}
+
+        # Initialize default programs
+        for program_name, program in [
+            (_DEFAULT_PROGRAM_NAME, _DEFAULT_PROGRAM),
+            (_DEFAULT_HISTORY_PROGRAM_NAME, _DEFAULT_HISTORY_PROGRAM),
+        ]:
+            self.register_program(program_name, program)
+
+    def _load_model(self, model_name: Optional[str]) -> guidance.llms.LLM:
+        model = guidance.llms.OpenAI(
+            model_name, organization=os.environ["OPENAI_ORGANIZATION"]
         )
-        code_str = raw_response_str[cur_start:cur_end].strip()
-        cur_pos = cur_end
-        all_converted_str.extend([non_code_str, code_str])
+        # TODO: Support Azure models
+        return model
 
-    last_non_code_str = [
-        f"#{ele}"
-        for ele in raw_response_str[cur_pos:].split("\n")
-        if not ele.startswith("```") and ele.strip()
-    ]
-    if len(last_non_code_str) > 0:
-        all_converted_str.append("\n".join(last_non_code_str))
+    def load_model(self, args, program: ChapyterAgentProgram) -> guidance.llms.LLM:
+        model_name = args.model
+        if model_name is None:
+            model_name = self.config.default_model
+        if program.model_name is not None:
+            model_name = program.model_name
 
-    return "\n".join(all_converted_str)
+        return self._load_model(model_name)
+
+    def _get_program(self, program_name: str = None) -> ChapyterAgentProgram:
+        if program_name not in self._programs:
+            raise ValueError(f"Program {program_name} not found.")
+        return self._programs[program_name]
+
+    def get_program(self, args) -> ChapyterAgentProgram:
+        if args.program is None:
+            if not args.history:
+                return self._get_program(self.config.default_program)
+            else:
+                return self._get_program(self.config.default_history_program)
+        else:
+            if isinstance(args.program, guidance.Program):
+                return ChapyterAgentProgram(args.program)
+            else:
+                try:
+                    return self._get_program(args.program)
+                except ValueError:
+                    return ChapyterAgentProgram(guidance(args.program))
+
+    def register_program(
+        self,
+        program_name: str,
+        program: ChapyterAgentProgram,
+    ):
+        self._programs[program_name] = program
+        logger.info(f"Registered template {program_name}.")
+
+    def execute_chat(
+        self,
+        message: str,
+        args: argparse.Namespace,
+        shell: InteractiveShell,
+        **kwargs,
+    ):
+        program = self.get_program(args)
+        llm = self.load_model(args, program)
+
+        response = program.execute(
+            message=message,
+            llm=llm,
+            shell=shell,
+            silent=not args.verbose,
+            **kwargs,
+        )
+        return response
 
 
-# The class MUST call this class decorator at creation time
 @magics_class
 class Chapyter(Magics):
-    @line_magic
-    def chat(self, line):
-        "my line magic"
-        print("Full access to the main IPython object:", self.shell)
-        print("Variables in the user namespace:", list(self.shell.user_ns.keys()))
-        return line
+    def __init__(
+        self,
+        shell: InteractiveShell = None,
+        agent: ChapyterAgent = None,
+    ):
+        super().__init__(shell)
+
+        if agent is None:
+            self.agent: ChapyterAgent = ChapyterAgent()
 
     @magic_arguments()
     @argument(
         "--model",
         "-m",
         type=str,
-        default="gpt-4",
+        default=None,
         help="The model to be used for the chat interface.",
+    )
+    @argument(
+        "--history",
+        "-h",
+        action="store_true",
+        help="Whether to use history for the code.",
+    )
+    @argument(
+        "--program",
+        "-p",
+        type=Any,
+        default=None,
+        help="The program to be used for the chat interface.",
     )
     @argument(
         "--verbose",
@@ -129,25 +156,15 @@ class Chapyter(Magics):
         args = parse_argstring(self.chat, line)
 
         if cell is None:
-            # print("Called as line magic")
-            current_message = line
-        else:
-            # print("Called as cell magic")
-            current_message = cell
+            return
+        current_message = cell
 
-        model = load_model(args.model)
-        program_out = DEFAULT_PROGRAM(
-            current_message=current_message,
-            llm=model,
-            silent=not args.verbose,
+        program_out = self.agent.execute_chat(current_message, args, self.shell)
+        execution_id = self.shell.execution_count
+        program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + program_out
+        self.shell.run_cell(
+            f"""get_ipython().set_next_input(\"\"\"{program_out}\"\"\")"""
         )
-        # print(program_out["code"])
-        # self.shell.run_cell(program_out["code"])
-        # code_span = MARKDOWN_CODE_PATTERN.findall(program_out["code"])
-        code_str = clean_response_str(
-            program_out["code"], execution_id=self.shell.execution_count
-        )
-        self.shell.run_cell(f"""get_ipython().set_next_input(\"\"\"{code_str}\"\"\")""")
 
     @magic_arguments()
     @argument(
@@ -168,23 +185,21 @@ class Chapyter(Magics):
         args = parse_argstring(self.chat, line)
 
         if cell is None:
-            # print("Called as line magic")
-            current_message = line
-        else:
-            # print("Called as cell magic")
-            current_message = cell
+            return
+        current_message = cell
 
-        model = load_model(args.model)
-        program_out = DEFAULT_PROGRAM(
-            current_message=current_message,
-            llm=model,
-            silent=not args.verbose,
-        )
-        return program_out["code"]
+        program_out = self.agent.execute_chat(current_message, args, self.shell)
+        return program_out
 
+    @line_magic
+    def chapyter_load_agent(self, line=None):
+        """Reload the chapyter agent with all the configurations"""
+        pass
 
-# In order to actually use these magics, you must register them with a
-# running IPython.
+    @line_cell_magic
+    def chapyter_config(self, line, cell=None):
+        """Configure the chapyter agent"""
+        pass
 
 
 def load_ipython_extension(ipython):

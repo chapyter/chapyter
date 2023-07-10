@@ -114,10 +114,13 @@ function selectCellById(notebook: Notebook, id: string): void {
  * Check if the code cell is a Chapyter magic cell
  * i.e., the cell starts with %chat or %%chat
  */
-function isCellChapyterMagicCell(cell: CodeCell): boolean {
+function isCellChapyterMagicCell(
+  cell: CodeCell,
+  strict: boolean = false
+): boolean {
   let codeCellText = cell.model.sharedModel.getSource();
   if (codeCellText.startsWith('%chat') || codeCellText.startsWith('%%chat')) {
-    if (!codeCellText.startsWith('%%chatonly')) {
+    if (!codeCellText.startsWith('%%chatonly') || !strict) {
       return true;
     }
   }
@@ -181,7 +184,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         let chatCell = args.cell as CodeCell;
 
         // We only want to automatically generate a new cell if the code cell starts with a magic command (e.g. %chat)
-        if (isCellChapyterMagicCell(chatCell) && isCellNotGenerated(chatCell)) {
+        if (isCellChapyterMagicCell(chatCell, true) && isCellNotGenerated(chatCell)) {
           // this is the original code cell that was executed
           if (chatCell.model.getMetadata('ChapyterCell') === undefined) {
             chatCell.model.setMetadata('ChapyterCell', {
@@ -241,7 +244,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
               chatCell.addClass(CHAPYTER_CHAT_CELL);
               chatCell.toggleClass(CHAPYTER_CHAT_CELL_EXECUTING);
               assistanceCell.addClass(CHAPYTER_ASSISTANCE_CELL);
-              console.log('new cell is executed', assistanceCell);
             }
           }
         }
