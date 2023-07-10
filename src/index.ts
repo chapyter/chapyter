@@ -225,6 +225,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
                */
 
               newCell.inputHidden = true;
+              selectCellById(notebook.content, newCell.model.id);
               NotebookActions.selectBelow(notebook.content);
 
               // set the proper linked cell ID
@@ -251,11 +252,17 @@ const plugin: JupyterFrontEndPlugin<void> = {
         let notebook = tracker.currentWidget;
         if (notebook) {
           if (linkedCellId) {
-            console.log('linkedCellId', linkedCellId);
             let linkedCell = findCellById(notebook.content, linkedCellId);
             if (linkedCell) {
-              console.log('removing', linkedCellId);
               deleteCell(notebook.content, linkedCell);
+              
+              /**
+               * Make sure we select the right cell after the deletion:
+               * Because we will use the selectBelow function when executing the generated 
+               * code cell, we want to make sure we are selecting the current codeCell in this 
+               * executionScheduled event.
+               */
+              selectCellById(notebook.content, codeCell.model.id);
             }
           }
         }
