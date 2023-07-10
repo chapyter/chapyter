@@ -69,7 +69,7 @@ Sounds good.
 )
 
 
-def clean_response_str(raw_response_str):
+def clean_response_str(raw_response_str: str, execution_id: int):
     all_code_spans = []
     for match in MARKDOWN_CODE_PATTERN.finditer(raw_response_str):
         all_code_spans.append(match.span(2))
@@ -78,7 +78,7 @@ def clean_response_str(raw_response_str):
     for cur_start, cur_end in all_code_spans:
         non_code_str = raw_response_str[cur_pos:cur_start]
         non_code_str = "\n".join(
-            ["# Assistant:"]
+            [f"# Assistant Code for Cell [{execution_id}]:"]
             + [
                 f"# {ele}"
                 for ele in non_code_str.split("\n")
@@ -144,7 +144,9 @@ class Chapyter(Magics):
         # print(program_out["code"])
         # self.shell.run_cell(program_out["code"])
         # code_span = MARKDOWN_CODE_PATTERN.findall(program_out["code"])
-        code_str = clean_response_str(program_out["code"])
+        code_str = clean_response_str(
+            program_out["code"], execution_id=self.shell.execution_count
+        )
         self.shell.run_cell(f"""get_ipython().set_next_input(\"\"\"{code_str}\"\"\")""")
 
     @magic_arguments()
