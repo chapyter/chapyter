@@ -128,6 +128,16 @@ function isCellChapyterMagicCell(
 }
 
 /**
+ * Check if a cell is a Chapyter magic cell in safe mode
+ * indicated by the -s or --safe flag
+ */
+function isCellChapyterMagicCellSafeMode(cell: CodeCell): boolean {
+  let codeCellText = cell.model.sharedModel.getSource();
+  let firstLine = codeCellText.split('\n')[0];
+  return firstLine.includes('-s') || firstLine.includes('--safe');
+}
+
+/**
  * Delete the cell from the notebook
  */
 function deleteCell(notebook: Notebook, cell: Cell): void {
@@ -184,13 +194,17 @@ const plugin: JupyterFrontEndPlugin<void> = {
         let chatCell = args.cell as CodeCell;
 
         // We only want to automatically generate a new cell if the code cell starts with a magic command (e.g. %chat)
-        if (isCellChapyterMagicCell(chatCell, true) && isCellNotGenerated(chatCell)) {
+        if (
+          isCellChapyterMagicCell(chatCell, true) &&
+          isCellNotGenerated(chatCell)
+        ) {
           // this is the original code cell that was executed
           if (chatCell.model.getMetadata('ChapyterCell') === undefined) {
             chatCell.model.setMetadata('ChapyterCell', {
               cellType: 'original'
             });
           }
+          let inSafeMode = isCellChapyterMagicCellSafeMode(chatCell);
 
           // because it is successfully executed
           let notebook = tracker.currentWidget;
@@ -205,9 +219,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
                 cellType: 'generated',
                 linkedCellId: chatCell.model.id // the original cell ID
               });
-
-              selectCellById(notebook.content, assistanceCell.model.id);
-              NotebookActions.run(notebook.content, notebook.sessionContext);
+              
+              console.log(inSafeMode)
+              if (!inSafeMode) {
+                selectCellById(notebook.content, assistanceCell.model.id);
+                NotebookActions.run(notebook.content, notebook.sessionContext);
+                assistanceCell.inputHidden = true;
+              }
 
               // The removal of existing linked cells is handled in the executionScheduled event
 
@@ -231,9 +249,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
                * for executing the next cell.
                */
 
-              assistanceCell.inputHidden = true;
               selectCellById(notebook.content, assistanceCell.model.id);
-              NotebookActions.selectBelow(notebook.content);
+              if (!inSafeMode) {
+                NotebookActions.selectBelow(notebook.content);
+              }
 
               // set the proper linked cell ID
               chatCell.model.setMetadata('ChapyterCell', {

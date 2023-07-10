@@ -146,6 +146,12 @@ class Chapyter(Magics):
         help="The program to be used for the chat interface.",
     )
     @argument(
+        "--safe",
+        "-s",
+        action="store_true",
+        help="Activate safe Mode that the code won't be automatically executed.",
+    )
+    @argument(
         "--verbose",
         "-v",
         action="store_true",
