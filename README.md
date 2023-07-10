@@ -1,7 +1,7 @@
 <div align="center">
   <img src="https://github.com/chapyter/chapyter/raw/main/.github/chapyter-logo.png" alt="Chapyter Logo" width="35%">
   <h3 align="center">
-  Chapyter is a jupyterlab extension for NL"P": Natural Language-based Programming
+  Chapyter is a Jupyterlab extension that seamlessly connects AI agents to your coding environment.
   </h3>
 </div>
 
