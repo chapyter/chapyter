@@ -9,6 +9,10 @@ import {
 } from '@jupyterlab/notebook';
 import { CodeCell, Cell, isCodeCellModel } from '@jupyterlab/cells';
 
+const CHAPYTER_CHAT_CELL = 'jp-chapyter-chat';
+const CHAPYTER_CHAT_CELL_EXECUTING = 'jp-chapyter-chat-executing';
+const CHAPYTER_ASSISTANCE_CELL = 'jp-chapyter-assistance';
+
 type ChapyterCellMetadata = {
   linkedCellId?: string;
   cellType: 'generated' | 'original';
@@ -174,13 +178,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
     NotebookActions.executed.connect((sender, args) => {
       if (args.success) {
         // It must be true that the cell is a code cell (otherwise it would not have been executed)
-        let codeCell = args.cell as CodeCell;
+        let chatCell = args.cell as CodeCell;
 
         // We only want to automatically generate a new cell if the code cell starts with a magic command (e.g. %chat)
-        if (isCellChapyterMagicCell(codeCell) && isCellNotGenerated(codeCell)) {
+        if (isCellChapyterMagicCell(chatCell) && isCellNotGenerated(chatCell)) {
           // this is the original code cell that was executed
-          if (codeCell.model.getMetadata('ChapyterCell') === undefined) {
-            codeCell.model.setMetadata('ChapyterCell', {
+          if (chatCell.model.getMetadata('ChapyterCell') === undefined) {
+            chatCell.model.setMetadata('ChapyterCell', {
               cellType: 'original'
             });
           }
@@ -188,18 +192,18 @@ const plugin: JupyterFrontEndPlugin<void> = {
           // because it is successfully executed
           let notebook = tracker.currentWidget;
           if (notebook) {
-            let newCell = findCellByTemplateString(
+            let assistanceCell = findCellByTemplateString(
               notebook.content,
-              codeCell.model.executionCount
+              chatCell.model.executionCount
             );
 
-            if (newCell) {
-              newCell.model.setMetadata('ChapyterCell', {
+            if (assistanceCell) {
+              assistanceCell.model.setMetadata('ChapyterCell', {
                 cellType: 'generated',
-                linkedCellId: codeCell.model.id // the original cell ID
+                linkedCellId: chatCell.model.id // the original cell ID
               });
 
-              selectCellById(notebook.content, newCell.model.id);
+              selectCellById(notebook.content, assistanceCell.model.id);
               NotebookActions.run(notebook.content, notebook.sessionContext);
 
               // The removal of existing linked cells is handled in the executionScheduled event
@@ -224,15 +228,20 @@ const plugin: JupyterFrontEndPlugin<void> = {
                * for executing the next cell.
                */
 
-              newCell.inputHidden = true;
-              selectCellById(notebook.content, newCell.model.id);
+              assistanceCell.inputHidden = true;
+              selectCellById(notebook.content, assistanceCell.model.id);
               NotebookActions.selectBelow(notebook.content);
 
               // set the proper linked cell ID
-              codeCell.model.setMetadata('ChapyterCell', {
+              chatCell.model.setMetadata('ChapyterCell', {
                 cellType: 'original',
-                linkedCellId: newCell.model.id
+                linkedCellId: assistanceCell.model.id
               });
+
+              chatCell.addClass(CHAPYTER_CHAT_CELL);
+              chatCell.toggleClass(CHAPYTER_CHAT_CELL_EXECUTING);
+              assistanceCell.addClass(CHAPYTER_ASSISTANCE_CELL);
+              console.log('new cell is executed', assistanceCell);
             }
           }
         }
@@ -240,14 +249,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
     });
 
     NotebookActions.executionScheduled.connect((sender, args) => {
-      console.log('Execution scheduled for cell:', args.cell);
       // It must be true that the cell is a code cell (otherwise it would not have been executed)
-      let codeCell = args.cell as CodeCell;
+      let chatCell = args.cell as CodeCell;
 
       // We want to automatically remove existing generated cells if we are running the chapyter cell
-      if (isCellChapyterMagicCell(codeCell) && isCellNotGenerated(codeCell)) {
+      if (isCellChapyterMagicCell(chatCell) && isCellNotGenerated(chatCell)) {
+        chatCell.toggleClass(CHAPYTER_CHAT_CELL_EXECUTING);
         let linkedCellId =
-          codeCell.model.getMetadata('ChapyterCell')?.linkedCellId;
+          chatCell.model.getMetadata('ChapyterCell')?.linkedCellId;
 
         let notebook = tracker.currentWidget;
         if (notebook) {
@@ -255,14 +264,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
             let linkedCell = findCellById(notebook.content, linkedCellId);
             if (linkedCell) {
               deleteCell(notebook.content, linkedCell);
-              
+
               /**
                * Make sure we select the right cell after the deletion:
-               * Because we will use the selectBelow function when executing the generated 
-               * code cell, we want to make sure we are selecting the current codeCell in this 
+               * Because we will use the selectBelow function when executing the generated
+               * code cell, we want to make sure we are selecting the current codeCell in this
                * executionScheduled event.
                */
-              selectCellById(notebook.content, codeCell.model.id);
+              selectCellById(notebook.content, chatCell.model.id);
             }
           }
         }

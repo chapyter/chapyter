@@ -3,3 +3,32 @@
 
     https://jupyterlab.readthedocs.io/en/stable/developer/css.html
 */
+
+.jp-chapyter-chat .jp-Editor, .jp-chapyter-chat .jp-Placeholder-content {
+    border-color: #F37726;
+    background: #FFFCF8;
+    border-radius: 4px 4px 0px 0px;
+    border-bottom: 0px;
+}
+
+.jp-chapyter-chat-executing .jp-Editor, .jp-chapyter-chat-executing .jp-Placeholder-content {
+    border-color: #F37726;
+    border-radius: 4px 4px 4px 4px;
+}
+
+.jp-chapyter-chat {
+    padding-bottom: 0%;
+}
+
+.jp-chapyter-assistance {
+    padding-top: 0%;
+}
+
+.jp-chapyter-assistance .jp-Editor, .jp-chapyter-assistance .jp-Placeholder-content {
+    background: #FFFFFF;
+    /* opacity: 75%; */
+    /* border-color: rgba(255, 244, 230); */
+    border-color: #F37726;
+    border-radius: 0px 0px 4px 4px;
+    border-top: 0px;
+}
