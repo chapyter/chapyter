@@ -9,6 +9,10 @@ import {
 } from '@jupyterlab/notebook';
 import { CodeCell, Cell, isCodeCellModel } from '@jupyterlab/cells';
 
+const CHAPYTER_CHAT_CELL = 'jp-chapyter-chat';
+const CHAPYTER_CHAT_CELL_EXECUTING = 'jp-chapyter-chat-executing';
+const CHAPYTER_ASSISTANCE_CELL = 'jp-chapyter-assistance';
+
 type ChapyterCellMetadata = {
   linkedCellId?: string;
   cellType: 'generated' | 'original';
@@ -233,6 +237,11 @@ const plugin: JupyterFrontEndPlugin<void> = {
                 cellType: 'original',
                 linkedCellId: newCell.model.id
               });
+
+              codeCell.addClass(CHAPYTER_CHAT_CELL);
+              codeCell.toggleClass(CHAPYTER_CHAT_CELL_EXECUTING);
+              newCell.addClass(CHAPYTER_ASSISTANCE_CELL);
+              console.log('new cell is executed', newCell);
             }
           }
         }
@@ -240,12 +249,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
     });
 
     NotebookActions.executionScheduled.connect((sender, args) => {
-      console.log('Execution scheduled for cell:', args.cell);
       // It must be true that the cell is a code cell (otherwise it would not have been executed)
       let codeCell = args.cell as CodeCell;
 
       // We want to automatically remove existing generated cells if we are running the chapyter cell
       if (isCellChapyterMagicCell(codeCell) && isCellNotGenerated(codeCell)) {
+        codeCell.toggleClass(CHAPYTER_CHAT_CELL_EXECUTING);
         let linkedCellId =
           codeCell.model.getMetadata('ChapyterCell')?.linkedCellId;
 
@@ -255,11 +264,11 @@ const plugin: JupyterFrontEndPlugin<void> = {
             let linkedCell = findCellById(notebook.content, linkedCellId);
             if (linkedCell) {
               deleteCell(notebook.content, linkedCell);
-              
+
               /**
                * Make sure we select the right cell after the deletion:
-               * Because we will use the selectBelow function when executing the generated 
-               * code cell, we want to make sure we are selecting the current codeCell in this 
+               * Because we will use the selectBelow function when executing the generated
+               * code cell, we want to make sure we are selecting the current codeCell in this
                * executionScheduled event.
                */
               selectCellById(notebook.content, codeCell.model.id);
