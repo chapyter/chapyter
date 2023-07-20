@@ -183,9 +183,7 @@ class Chapyter(Magics):
         program_out = self.agent.execute_chat(current_message, args, self.shell)
         execution_id = self.shell.execution_count
         program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + program_out
-        self.shell.run_cell(
-            f"""get_ipython().set_next_input(\"\"\"{program_out}\"\"\")"""
-        )
+        self.shell.set_next_input(program_out)
 
     @magic_arguments()
     @argument(
