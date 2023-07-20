@@ -261,7 +261,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
               });
 
               chatCell.addClass(CHAPYTER_CHAT_CELL);
-              chatCell.toggleClass(CHAPYTER_CHAT_CELL_EXECUTING);
+              chatCell.removeClass(CHAPYTER_CHAT_CELL_EXECUTING);
               assistanceCell.addClass(CHAPYTER_ASSISTANCE_CELL);
             }
           }
