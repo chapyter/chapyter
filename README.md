@@ -27,7 +27,7 @@ By enabling "natural language programming" in your most familiar IDE, Chapyter c
     ```
     Note: It will upgrade the jupyterlab to ≥ 4.0. It might break your environments. 
 
-2. Usage: see [examples/starter.ipynb](examples/starter.ipynb) for a starter notebook. 
+2. Usage: see [examples/01-quick-start.ipynb](examples/01-quick-start.ipynb) for a starter notebook. 
 
     1. Set the proper `OPENAI_API_KEY` and `OPENAI_ORGANIZATION` in the environment variable 
     2. Use the magic command `%%chat` in a code cell: 
@@ -38,7 +38,7 @@ By enabling "natural language programming" in your most familiar IDE, Chapyter c
        It will call gpt-4-0613 to generate the python code for listing all the files in the folder, and execute the generated code automatically. In this case, this plugin serves as the interpreter that translates the natural language to python code and execute it. 
 
 3. Examples: 
-    - [examples/starter.ipynb](examples/starter.ipynb) A starter notebook illustrating the basic functions of `chapyter`. 
+    - [examples/starter.ipynb](examples/01-quick-start.ipynb) A starter notebook illustrating the basic functions of `chapyter`. 
     
 ## Development Notes
 
