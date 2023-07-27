@@ -6,6 +6,7 @@ from typing import Any, Optional, Union  # noqa
 
 import dotenv
 import guidance
+from IPython.core.error import UsageError
 from IPython.core.interactiveshell import InteractiveShell
 from IPython.core.magic import (  # type: ignore
     Magics,
@@ -19,6 +20,7 @@ from IPython.core.magic_arguments import (  # type: ignore
     parse_argstring,
 )
 from traitlets import Bool, Dict, Instance, Unicode, default, observe  # noqa
+from traitlets.config.loader import Config
 
 from .programs import (
     _DEFAULT_CHATONLY_PROGRAM,
@@ -118,7 +120,7 @@ Will add more soon.
         allow_none=True,
         help=(
             "The API key used for Azure API queries. "
-            "By default this will be read from the `AZURE_API_KEY` environment variable. "  # noqa
+            "By default this will be read from the `AZURE_OPENAI_API_KEY` environment variable. "  # noqa
             "Can be left empty if not using Azure."
         ),
     ).tag(config=True)
@@ -338,16 +340,51 @@ Will add more soon.
 
     @line_magic
     def chapyter(self, line):
-        """Used for displaying the current chapyter configurations.
-        Exemplar usage:
-        %chapyter
-        """
+        """Used for displaying and modifying Chapyter Agent configurations.
 
-        help = self.class_get_help(self)
-        # strip leading '--' from cl-args:
-        help = re.sub(re.compile(r"^--", re.MULTILINE), "", help)
-        print(help)
-        return
+        Exemplar usage:
+
+        - %chapyter
+          print all the configurable parameters and its current value
+
+        - %chapyter <parameter_name>
+          print the current value of the parameter
+
+        - %chapyter <parameter_name>=<value>
+          set the value of the parameter
+        """
+        # remove text after comments
+        line = line.strip().split("#")[0].strip()
+
+        all_class_configs = self.class_own_traits()
+
+        if not line or line.startswith("#"):
+            help = self.class_get_help(self)
+            # strip leading '--' from cl-args:
+            help = re.sub(re.compile(r"^--", re.MULTILINE), "", help)
+            print(help)
+            return
+        elif line in all_class_configs.keys():
+            return getattr(self, line)
+        elif "=" in line and line.split("=")[0] in all_class_configs.keys():
+            cfg = Config()
+            exec(f"cfg.{self.__class__.__name__}." + line, self.shell.user_ns, locals())
+            self.update_config(cfg)
+        elif line.startswith("help"):
+            print(
+                "The %chapyter magic command supports the following usage:\n"
+                "- %chapyter\n  print all the configurable parameters and its current value\n"
+                "- %chapyter <parameter_name>\n  print the current value of the parameter\n"
+                "- %chapyter <parameter_name>=<value>\n  set the value of the parameter"
+            )
+        else:
+            raise UsageError(
+                f"Invalid usage of the chapyter command: {line}. "
+                "It supports the following usage:\n"
+                "- %chapyter\n  print all the configurable parameters and its current value\n"
+                "- %chapyter <parameter_name>\n  print the current value of the parameter\n"
+                "- %chapyter <parameter_name>=<value>\n  set the value of the parameter"
+            )
 
 
 def load_ipython_extension(ipython):
