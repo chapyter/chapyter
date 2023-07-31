@@ -353,6 +353,10 @@ Will add more soon.
         - %chapyter <parameter_name>=<value>
           set the value of the parameter
         """
+
+        # This code is inspired by the %config magic command in IPython
+        # See the code here: https://github.com/ipython/ipython/blob/6b17e43544316d691376e35e677032a4b00d6eeb/IPython/core/magics/config.py#L36
+
         # remove text after comments
         line = line.strip().split("#")[0].strip()
 
@@ -366,7 +370,7 @@ Will add more soon.
             return
         elif line in all_class_configs.keys():
             return getattr(self, line)
-        elif "=" in line and line.split("=")[0] in all_class_configs.keys():
+        elif "=" in line and line.split("=")[0].strip() in all_class_configs.keys():
             cfg = Config()
             exec(f"cfg.{self.__class__.__name__}." + line, self.shell.user_ns, locals())
             self.update_config(cfg)
