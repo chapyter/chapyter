@@ -366,7 +366,7 @@ Will add more soon.
             return
         elif line in all_class_configs.keys():
             return getattr(self, line)
-        elif "=" in line and line.split("=")[0] in all_class_configs.keys():
+        elif "=" in line and line.split("=")[0].strip() in all_class_configs.keys():
             cfg = Config()
             exec(f"cfg.{self.__class__.__name__}." + line, self.shell.user_ns, locals())
             self.update_config(cfg)
