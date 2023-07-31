@@ -353,6 +353,10 @@ Will add more soon.
         - %chapyter <parameter_name>=<value>
           set the value of the parameter
         """
+
+        # This code is inspired by the %config magic command in IPython
+        # See the code here: https://github.com/ipython/ipython/blob/6b17e43544316d691376e35e677032a4b00d6eeb/IPython/core/magics/config.py#L36
+
         # remove text after comments
         line = line.strip().split("#")[0].strip()
 
