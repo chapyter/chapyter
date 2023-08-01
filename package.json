@@ -1,6 +1,6 @@
 {
     "name": "@shannon-shen/chapyter",
-    "version": "0.3.0",
+    "version": "0.3.1",
     "description": "A Natural Language-Based Python Program Interpreter",
     "keywords": [
         "jupyter",
