@@ -298,6 +298,38 @@ const plugin: JupyterFrontEndPlugin<void> = {
         }
       }
     });
+
+    tracker.widgetAdded.connect((sender, notebookPanel) => {
+      notebookPanel.context.ready.then(() => {
+        notebookPanel.content.widgets.forEach(cell => {
+          switch (cell.model.type) {
+            case 'code': {
+              /**
+               * The logic: 
+               * When we load a notebook, we want to check if a code cell is a chapyter cell.
+               * 1. if it is generated, then we want to add the class CHAPYTER_ASSISTANCE_CELL
+               * 2. if it is original, 
+               *  a. if the linked cell exists, then we want to add the class CHAPYTER_CHAT_CELL
+               *  b. if the linked cell does not exist, then we want to add the class CHAPYTER_CHAT_CELL_EXECUTING
+               */
+              if (cell.model.getMetadata('ChapyterCell')) {
+                if (cell.model.getMetadata('ChapyterCell')?.cellType === 'original') {
+                  if (findCellById(notebookPanel.content, cell.model.getMetadata('ChapyterCell')?.linkedCellId)) {
+                    cell.addClass(CHAPYTER_CHAT_CELL);
+                  } else {
+                    cell.addClass(CHAPYTER_CHAT_CELL_EXECUTING);
+                  }
+                } else if (cell.model.getMetadata('ChapyterCell')?.cellType === 'generated') {
+                  cell.addClass(CHAPYTER_ASSISTANCE_CELL);
+                } else {
+                  console.log(cell.model.getMetadata('ChapyterCell'));
+                }
+              }
+            }
+          }
+        })
+      })
+    });
   }
 };
 
