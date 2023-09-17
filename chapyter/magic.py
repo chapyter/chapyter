@@ -329,6 +329,8 @@ Will add more soon.
         if contains_SQL != "NO SQL FOUND": #If the response has SQL in it, execute it, get df and store it
             df = sql_query_to_athena_df(contains_SQL)
             display(df)
+            self.shell.user_ns['df'] = df
+
 
 
 
