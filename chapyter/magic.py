@@ -4,6 +4,22 @@ import os
 import re
 from typing import Any, Optional, Union  # noqa
 
+from IPython.display import display
+
+
+import sys
+print(sys.path)
+from langchain.chat_models import ChatOpenAI
+from .LLMimic_app import query_llm, sql_query_to_athena_df
+
+DATABASE = 'mimiciii'
+S3_BUCKET = 's3://emmett-athena-bucket/'
+AWS_REGION = 'us-east-1'
+LLM = ChatOpenAI(model_name="gpt-4", max_tokens=2000)
+
+
+
+
 import dotenv
 import guidance
 from IPython.core.error import UsageError
@@ -248,6 +264,8 @@ Will add more soon.
         shell: InteractiveShell,
         **kwargs,
     ):
+        
+        #STEP 2: Executes chat
         program = self._get_program(args, chatonly=kwargs.pop("chatonly", False))
         llm = self._load_model(args, program)
 
@@ -304,6 +322,75 @@ Will add more soon.
         program_out = self.execute_chat(current_message, args, self.shell)
         execution_id = self.shell.execution_count
         program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + program_out
+
+        #Emmett for executing SQl code
+        sys_prompt = "You are an expert coder. If the text/code sent to you contains a SQL query, respond with only the SQL query found, which is directly executable in Athena. Don't return the query in the form of a triple string. Change things that look like 'mimic.mimiciii.patients' to simply 'patients'. Otherwise respond only 'NO SQL FOUND'."
+        contains_SQL = query_llm(program_out, sys_prompt)
+        if contains_SQL != "NO SQL FOUND": #If the response has SQL in it, execute it, get df and store it
+            df = sql_query_to_athena_df(contains_SQL)
+            display(df)
+
+
+
+        self.shell.set_next_input(program_out)
+
+
+
+    @magic_arguments()
+    @argument(
+        "--model",
+        "-m",
+        type=str,
+        default=None,
+        help="The model to be used for the chat interface.",
+    )
+    @argument(
+        "--history",
+        "-h",
+        action="store_true",
+        help="Whether to use history for the code.",
+    )
+    @argument(
+        "--program",
+        "-p",
+        type=Any,
+        default=None,
+        help="The program to be used for the chat interface.",
+    )
+    @argument(
+        "--safe",
+        "-s",
+        action="store_true",
+        help="Activate safe Mode that the code won't be automatically executed.",
+    )
+    @argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Whether to set slient=True for guidance calls.",
+    )
+    @line_cell_magic
+    def mimic(self, line, cell=None):
+
+        #Step 1: When %% is called
+
+        args = parse_argstring(self.chat, line)
+
+        # print("\nGot magic args:   ", args)
+
+        if cell is None:
+            return
+        # print("\nCell and current message is:    ", cell)
+        current_message = cell
+
+        #this takes our current message adn executes chat
+        program_out = self.execute_chat(current_message, args, self.shell)
+
+        # print("\nProgram out", program_out)
+
+
+        execution_id = self.shell.execution_count
+        program_out = f"# MIMIC-III retrieval code generated [{execution_id}]:\n" + program_out
         self.shell.set_next_input(program_out)
 
     @magic_arguments()
@@ -331,7 +418,7 @@ Will add more soon.
         program_out = self.execute_chat(
             current_message, args, self.shell, chatonly=True
         )
-        print(program_out)
+        # print(program_out)
 
     @line_magic
     def chapyter_load_agent(self, line=None):

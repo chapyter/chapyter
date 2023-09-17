@@ -23,8 +23,15 @@ class ChapyterAgentProgram:
         self.pre_call_hooks = self.pre_call_hooks or {}
         self.post_call_hooks = self.post_call_hooks or {}
 
+    #This is step 3, execute
     def execute(self, message: str, llm: str, shell: InteractiveShell, **kwargs) -> str:
+
+        # message = "Write python code to print the first 100 odd numbers"
+
         model_input_message: Any = message
+
+        # print("Executing with message:", message, "\n\n")
+
         for name, hook in self.pre_call_hooks.items():
             model_input_message = hook(
                 model_input_message,
@@ -32,10 +39,23 @@ class ChapyterAgentProgram:
                 **kwargs,
             )
 
+            # print("\n\nHook", model_input_message)
+
+        # print("\n\nModelinputmessage", model_input_message)
+
+
+        #this is the core we need to change
+        # print("\n\nExecuting gudance program", llm, kwargs, model_input_message)
         raw_program_response = self.guidance_program(
             **model_input_message, llm=llm, **kwargs
         )
+
+
+
+
         response = raw_program_response
+
+        # print("\n\n!!Got raw_program_response:", raw_program_response)
 
         for name, hook in self.post_call_hooks.items():
             response = hook(
@@ -43,40 +63,67 @@ class ChapyterAgentProgram:
                 shell,
                 **kwargs,
             )
+
+        # print("\n\nGot final response", response)
+
         return response
 
+
+# default_coding_guidance_program = guidance(
+#     """
+# {{#system~}}
+# You are a helpful and assistant and you are chatting with an python programmer.
+
+# {{~/system}}
+
+# {{#user~}}
+# From now on, you are ought to generate only the python code based on the description from the programmer.
+# {{~/user}}
+
+# {{#assistant~}}
+# Ok, I will do that. Let's do a practice round.
+# {{~/assistant}}
+
+# {{#user~}}
+# Load the json file called orca.json
+# {{~/user}}
+
+# {{#assistant~}}
+# import json 
+# with open('orca.json') as file:
+#     data = json.load(file)
+# {{~/assistant}}
+
+# {{#user~}}
+# That was great, now let's do another one.
+# {{~/user}}
+
+# {{#assistant~}}
+# Sounds good.
+# {{~/assistant}}
+
+# {{#user~}}
+# {{current_message}}
+# {{~/user}}
+
+# {{#assistant~}}
+# {{gen 'code' temperature=0 max_tokens=2048}}
+# {{~/assistant}}
+# """
+# )
 
 default_coding_guidance_program = guidance(
     """
 {{#system~}}
-You are a helpful and assistant and you are chatting with an python programmer.
-
+You are a helpful and assistant and you are chatting with an programmer interested in retrieving data from the MIMIC-III SQL database on AWS Athena.
 {{~/system}}
 
 {{#user~}}
-From now on, you are ought to generate only the python code based on the description from the programmer.
+From now on, you are ought to generate only SQL code based on the description from the programmer.
 {{~/user}}
 
 {{#assistant~}}
-Ok, I will do that. Let's do a practice round.
-{{~/assistant}}
-
-{{#user~}}
-Load the json file called orca.json
-{{~/user}}
-
-{{#assistant~}}
-import json 
-with open('orca.json') as file:
-    data = json.load(file)
-{{~/assistant}}
-
-{{#user~}}
-That was great, now let's do another one.
-{{~/user}}
-
-{{#assistant~}}
-Sounds good.
+Ok, I will do that.
 {{~/assistant}}
 
 {{#user~}}
