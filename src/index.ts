@@ -119,7 +119,7 @@ function isCellChapyterMagicCell(
   strict: boolean = false
 ): boolean {
   let codeCellText = cell.model.sharedModel.getSource();
-  if (codeCellText.startsWith('%chat') || codeCellText.startsWith('%%chat')) {
+  if (codeCellText.startsWith('%chat') || codeCellText.startsWith('%%chat') || codeCellText.startsWith('%%mimic')) {
     if (!codeCellText.startsWith('%%chatonly') || !strict) {
       return true;
     }
@@ -221,10 +221,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
               });
               
               console.log(inSafeMode)
+              assistanceCell.inputHidden = true;
               if (!inSafeMode) {
                 selectCellById(notebook.content, assistanceCell.model.id);
                 NotebookActions.run(notebook.content, notebook.sessionContext);
-                assistanceCell.inputHidden = true;
               }
 
               // The removal of existing linked cells is handled in the executionScheduled event
