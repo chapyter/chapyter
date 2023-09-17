@@ -1,3 +1,8 @@
+#Step 1: %mimic cell magic triggered
+#Step 2: def execute_chat (doesn't do anything interesting, passes on message)
+#Step 3: def execute (doesn't do anything interesting, passes on message)
+#Step 4: guidance_program - this is where we input our custom phrasing
+
 import dataclasses
 import re
 from typing import Any, Callable, Dict, Optional
@@ -41,7 +46,7 @@ class ChapyterAgentProgram:
 
             # print("\n\nHook", model_input_message)
 
-        # print("\n\nModelinputmessage", model_input_message)
+        print("\n\nModelinputmessage", model_input_message)
 
 
         #this is the core we need to change
@@ -195,11 +200,12 @@ _DEFAULT_PROGRAM = ChapyterAgentProgram(
 default_coding_history_guidance_program = guidance(
     """
 {{#system~}}
-You are a helpful assistant to help with an python programmer.
+You are a helpful and assistant and you are chatting with an programmer interested in retrieving data from the MIMIC-III SQL database on AWS Athena.
+If they ask for something that is answerable with a SQL query, make sure there is only one SELECT statement.
 {{~/system}}
 
 {{#user~}}
-Here is my python code so far:
+Here is my code so far:
 {{code_history}}
 {{~/user}}
 

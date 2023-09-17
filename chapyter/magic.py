@@ -328,7 +328,7 @@ Will add more soon.
         contains_SQL = query_llm(program_out, sys_prompt)
         if contains_SQL != "NO SQL FOUND": #If the response has SQL in it, execute it, get df and store it
             df = sql_query_to_athena_df(contains_SQL)
-            display(df)
+            display(df.head(5))
             self.shell.user_ns['df'] = df
 
 
