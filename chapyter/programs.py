@@ -6,6 +6,8 @@
 import dataclasses
 import re
 from typing import Any, Callable, Dict, Optional
+import openai
+
 
 import guidance
 from IPython.core.interactiveshell import InteractiveShell
@@ -14,6 +16,34 @@ __all__ = [
     "ChapyterAgentProgram",
     "_DEFAULT_HISTORY_PROGRAM",
 ]
+
+user_inputs = []
+llm_responses = []
+
+
+def extract_code_blocks(text):
+    # Regular expression pattern to match code blocks between triple backticks
+    pattern = r"```(.*?)```"
+    
+    # Use re.DOTALL to make sure '.' matches newline characters as well
+    matches = re.findall(pattern, text, re.DOTALL)
+    
+    # Strip any leading or trailing whitespace from each match and return as a list
+    return [match.strip() for match in matches]
+
+
+def query_llm(llm_prompt, sys_prompt):
+    response = openai.ChatCompletion.create(
+        model='gpt-4',
+        messages=[
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": llm_prompt}
+        ],
+        max_tokens=1000,
+        temperature=0.1,
+    )
+    response = response["choices"][0]["message"]["content"]
+    return response
 
 
 @dataclasses.dataclass
@@ -30,46 +60,29 @@ class ChapyterAgentProgram:
     #This is step 3, execute
     def execute(self, message: str, llm: str, shell: InteractiveShell, **kwargs) -> str:
 
-        # message = "Write python code to print the first 100 odd numbers"
+        parsed_history = get_execution_history(shell)
 
-        model_input_message: Any = message
+        sys_prompt = """
+        You are a helpful AI Research Assistant. You are chatting with a Clinical Researcher interested in retrieving data from the MIMIC-III SQL database on AWS Athena.
+        If they ask for something that is answerable with a SQL query, make sure there is only one SELECT statement.            
+        """
 
-        # print("Executing with message:", message, "\n\n")
+        llm_prompt = ""
+        
+        for input_no in range(len(parsed_history)):
+            llm_prompt += f"Clinical Researcher: {parsed_history[input_no]}\n\n"
+            if input_no < len(llm_responses):
+                llm_prompt += f"AI Research Assistant: {llm_responses[input_no]}\n\n"
+            else:
+                llm_prompt += f"AI Research Assistant: "
 
-        #Step A: First invokes any pre-call hooks, potentially modifying the message
-        print("\n\nPrehook: ", model_input_message)
-        for name, hook in self.pre_call_hooks.items():
-            model_input_message = hook(
-                model_input_message,
-                shell,
-                **kwargs,
-            )
+        # print("\n\n")
+        # print(llm_prompt, "\n\n")
 
+        llm_response = query_llm(llm_prompt, sys_prompt)
+        llm_responses.append(llm_response)
 
-        #Step B: Passes the possibly modified message to the guidance program
-        #For interpretation and response generation
-        print("\n\nPosthook, right before guidance program: ", model_input_message)
-        print(f"In guidance, will be plugging in {model_input_message} AND {kwargs}")
-        raw_program_response = self.guidance_program(
-            **model_input_message, llm=llm, **kwargs
-        )
-
-        response = raw_program_response
-        print("\n\nAfter execution, have response: ", response)
-
-        # print("\n\n!!Got raw_program_response:", raw_program_response)
-
-        #Step 3: Passes the message to process any of the assistant's raw responses
-        for name, hook in self.post_call_hooks.items():
-            response = hook(
-                response,
-                shell,
-                **kwargs,
-            )
-
-        # print("\n\nGot final response", response)
-        print("\n\nReturning response!")
-        return response
+        return llm_response
 
 
 MARKDOWN_CODE_PATTERN = re.compile(r"`{3}([\w]*)\n([\S\s]+?)\n`{3}")
@@ -113,6 +126,19 @@ def clean_response_str(raw_response_str: str):
     return "\n".join(all_converted_str)
 
 
+def clean_execution_history(s):
+    # Remove triple backticks
+    s = s.replace('```', '')
+    
+    # Remove leading and closing newline characters
+    s = s.strip()
+    
+    # Remove the %%mimic --safe -h
+    s = s.replace('%%mimic --safe -h', '').strip()
+    
+    return s
+
+
 def get_execution_history(ipython, get_output=True, width=4):
     def limit_output(output, limit=100):
         """Limit the output to a certain number of words."""
@@ -149,7 +175,10 @@ def get_execution_history(ipython, get_output=True, width=4):
             history_str += "\nOutput:\n" + limit_output(output.strip())
 
         history_strs.append(history_str + "\n")
-    return "\n".join(history_strs)
+
+    history_strs = [clean_execution_history(s) for s in history_strs]
+
+    return history_strs
 
 
 default_coding_history_guidance_program = guidance(

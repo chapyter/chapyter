@@ -90,7 +90,7 @@ def sql_query_to_athena_df(query):
     else:
         print("Query failed!")
 
-    return df
+    return df, query
 
 
 

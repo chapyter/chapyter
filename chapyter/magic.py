@@ -8,7 +8,6 @@ from IPython.display import display
 
 
 import sys
-print(sys.path)
 from langchain.chat_models import ChatOpenAI
 from .LLMimic_app import query_llm, sql_query_to_athena_df
 
@@ -313,15 +312,17 @@ Will add more soon.
 
         program_out = self.execute_chat(current_message, args, self.shell)
         execution_id = self.shell.execution_count
-        program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + program_out
 
         #Emmett for executing SQl code
         sys_prompt = "You are an expert coder. If the text/code sent to you contains a SQL query, respond with only the SQL query found, which is directly executable in Athena. Don't return the query in the form of a triple string. Change things that look like 'mimic.mimiciii.patients' to simply 'patients'. Otherwise respond only 'NO SQL FOUND'."
         contains_SQL = query_llm(program_out, sys_prompt)
         if contains_SQL != "NO SQL FOUND": #If the response has SQL in it, execute it, get df and store it
-            df = sql_query_to_athena_df(contains_SQL)
+            df, sql_query = sql_query_to_athena_df(contains_SQL)
             display(df.head(5))
             self.shell.user_ns['df'] = df
+
+        program_out = f"# AAssistant Code for Cell [{execution_id}]:\n" + program_out
+        # program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + sql_query
 
         self.shell.set_next_input(program_out)
 
@@ -369,15 +370,17 @@ Will add more soon.
 
         program_out = self.execute_chat(current_message, args, self.shell)
         execution_id = self.shell.execution_count
-        program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + program_out
 
         #Emmett for executing SQl code
         sys_prompt = "You are an expert coder. If the text/code sent to you contains a SQL query, respond with only the SQL query found, which is directly executable in Athena. Don't return the query in the form of a triple string. Change things that look like 'mimic.mimiciii.patients' to simply 'patients'. Otherwise respond only 'NO SQL FOUND'."
         contains_SQL = query_llm(program_out, sys_prompt)
         if contains_SQL != "NO SQL FOUND": #If the response has SQL in it, execute it, get df and store it
-            df = sql_query_to_athena_df(contains_SQL)
+            df, sql_query = sql_query_to_athena_df(contains_SQL)
             display(df.head(5))
             self.shell.user_ns['df'] = df
+
+        program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + program_out
+        # program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + sql_query
 
         self.shell.set_next_input(program_out)
 
