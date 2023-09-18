@@ -390,9 +390,14 @@ Will add more soon.
             display(df.head(5))
             self.shell.user_ns['df'] = df
 
-        first_two_rows_str = df.head(2).to_string()
-        to_llm_history = program_out + "\n" + "First two rows of the df below:" + "\n" + first_two_rows_str
-        llm_responses.append(to_llm_history)
+            first_two_rows_str = df.head(2).to_string()
+            to_llm_history = program_out + "\n" + "First two rows of the df below:" + "\n" + first_two_rows_str        
+            llm_responses.append(to_llm_history)
+        else:
+            print(program_out)
+            llm_responses.append(program_out)
+
+
 
         program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + program_out
         # program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + sql_query
