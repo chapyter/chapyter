@@ -58,14 +58,11 @@ class ChapyterAgentProgram:
         self.post_call_hooks = self.post_call_hooks or {}
 
     #This is step 3, execute
-    def execute(self, message: str, llm: str, shell: InteractiveShell, **kwargs) -> str:
+    def execute(self, message: str, llm: str, shell: InteractiveShell, sys_prompt: str, **kwargs) -> str:
 
         parsed_history = get_execution_history(shell)
 
-        sys_prompt = """
-        You are a helpful AI Research Assistant. You are chatting with a Clinical Researcher interested in retrieving data from the MIMIC-III SQL database on AWS Athena.
-        If they ask for something that is answerable with a SQL query, make sure there is only one SELECT statement.            
-        """
+        sys_prompt = sys_prompt
 
         llm_prompt = ""
         
@@ -76,10 +73,14 @@ class ChapyterAgentProgram:
             else:
                 llm_prompt += f"AI Research Assistant: "
 
-        # print("\n\n")
-        # print(llm_prompt, "\n\n")
+        print("\n\n")
+        print(llm_prompt, "\n\n")
 
         llm_response = query_llm(llm_prompt, sys_prompt)
+
+        print("AI response: ")
+        print(llm_response)
+
         llm_responses.append(llm_response)
 
         return llm_response
@@ -134,7 +135,9 @@ def clean_execution_history(s):
     s = s.strip()
     
     # Remove the %%mimic --safe -h
-    s = s.replace('%%mimic --safe -h', '').strip()
+    s = s.replace('%%mimicSQL', '').strip()
+    s = s.replace('%%mimicPython', '').strip()
+
     
     return s
 
