@@ -17,9 +17,6 @@ __all__ = [
     "_DEFAULT_HISTORY_PROGRAM",
 ]
 
-user_inputs = []
-llm_responses = []
-
 
 def extract_code_blocks(text):
     # Regular expression pattern to match code blocks between triple backticks
@@ -58,7 +55,7 @@ class ChapyterAgentProgram:
         self.post_call_hooks = self.post_call_hooks or {}
 
     #This is step 3, execute
-    def execute(self, message: str, llm: str, shell: InteractiveShell, sys_prompt: str, **kwargs) -> str:
+    def execute(self, message: str, llm: str, shell: InteractiveShell, sys_prompt: str, llm_responses: list, **kwargs) -> str:
 
         parsed_history = get_execution_history(shell)
 
@@ -73,15 +70,13 @@ class ChapyterAgentProgram:
             else:
                 llm_prompt += f"AI Research Assistant: "
 
-        print("\n\n")
-        print(llm_prompt, "\n\n")
 
         llm_response = query_llm(llm_prompt, sys_prompt)
 
-        print("AI response: ")
-        print(llm_response)
-
-        llm_responses.append(llm_response)
+        # print("\n\n")
+        # print(llm_prompt, "\n\n")
+        # print("AI response: ")
+        # print(llm_response)
 
         return llm_response
 
