@@ -331,11 +331,7 @@ Will add more soon.
             display(df.head(5))
             self.shell.user_ns['df'] = df
 
-
-
-
         self.shell.set_next_input(program_out)
-
 
 
     @magic_arguments()
@@ -373,27 +369,28 @@ Will add more soon.
     )
     @line_cell_magic
     def mimic(self, line, cell=None):
-
-        #Step 1: When %% is called
-
         args = parse_argstring(self.chat, line)
-
-        # print("\nGot magic args:   ", args)
 
         if cell is None:
             return
-        # print("\nCell and current message is:    ", cell)
         current_message = cell
 
-        #this takes our current message adn executes chat
         program_out = self.execute_chat(current_message, args, self.shell)
-
-        # print("\nProgram out", program_out)
-
-
         execution_id = self.shell.execution_count
-        program_out = f"# MIMIC-III retrieval code generated [{execution_id}]:\n" + program_out
+        program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + program_out
+
+        #Emmett for executing SQl code
+        sys_prompt = "You are an expert coder. If the text/code sent to you contains a SQL query, respond with only the SQL query found, which is directly executable in Athena. Don't return the query in the form of a triple string. Change things that look like 'mimic.mimiciii.patients' to simply 'patients'. Otherwise respond only 'NO SQL FOUND'."
+        contains_SQL = query_llm(program_out, sys_prompt)
+        if contains_SQL != "NO SQL FOUND": #If the response has SQL in it, execute it, get df and store it
+            df = sql_query_to_athena_df(contains_SQL)
+            display(df.head(5))
+            self.shell.user_ns['df'] = df
+
         self.shell.set_next_input(program_out)
+
+
+
 
     @magic_arguments()
     @argument(

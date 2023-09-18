@@ -16,7 +16,6 @@ __all__ = [
     "_DEFAULT_HISTORY_PROGRAM",
 ]
 
-
 @dataclasses.dataclass
 class ChapyterAgentProgram:
     guidance_program: guidance.Program
@@ -37,6 +36,7 @@ class ChapyterAgentProgram:
 
         # print("Executing with message:", message, "\n\n")
 
+        #Step A: First invokes any pre-call hooks, potentially modifying the message
         for name, hook in self.pre_call_hooks.items():
             model_input_message = hook(
                 model_input_message,
@@ -46,22 +46,17 @@ class ChapyterAgentProgram:
 
             # print("\n\nHook", model_input_message)
 
-        print("\n\nModelinputmessage", model_input_message)
-
-
-        #this is the core we need to change
-        # print("\n\nExecuting gudance program", llm, kwargs, model_input_message)
+        #Step B: Passes the possibly modified message to the guidance program
+        #For interpretation and response generation
         raw_program_response = self.guidance_program(
             **model_input_message, llm=llm, **kwargs
         )
-
-
-
 
         response = raw_program_response
 
         # print("\n\n!!Got raw_program_response:", raw_program_response)
 
+        #Step 3: Passes the message to process any of the assistant's raw responses
         for name, hook in self.post_call_hooks.items():
             response = hook(
                 response,
