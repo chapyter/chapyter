@@ -6,15 +6,42 @@
 import dataclasses
 import re
 from typing import Any, Callable, Dict, Optional
+import openai
+
 
 import guidance
 from IPython.core.interactiveshell import InteractiveShell
 
 __all__ = [
     "ChapyterAgentProgram",
-    "_DEFAULT_PROGRAM",
     "_DEFAULT_HISTORY_PROGRAM",
 ]
+
+
+def extract_code_blocks(text):
+    # Regular expression pattern to match code blocks between triple backticks
+    pattern = r"```(.*?)```"
+    
+    # Use re.DOTALL to make sure '.' matches newline characters as well
+    matches = re.findall(pattern, text, re.DOTALL)
+    
+    # Strip any leading or trailing whitespace from each match and return as a list
+    return [match.strip() for match in matches]
+
+
+def query_llm(llm_prompt, sys_prompt):
+    response = openai.ChatCompletion.create(
+        model='gpt-4',
+        messages=[
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": llm_prompt}
+        ],
+        max_tokens=1000,
+        temperature=0.1,
+    )
+    response = response["choices"][0]["message"]["content"]
+    return response
+
 
 @dataclasses.dataclass
 class ChapyterAgentProgram:
@@ -28,115 +55,30 @@ class ChapyterAgentProgram:
         self.post_call_hooks = self.post_call_hooks or {}
 
     #This is step 3, execute
-    def execute(self, message: str, llm: str, shell: InteractiveShell, **kwargs) -> str:
+    def execute(self, message: str, llm: str, shell: InteractiveShell, sys_prompt: str, llm_responses: list, **kwargs) -> str:
 
-        # message = "Write python code to print the first 100 odd numbers"
+        parsed_history = get_execution_history(shell)
 
-        model_input_message: Any = message
+        sys_prompt = sys_prompt
 
-        # print("Executing with message:", message, "\n\n")
-
-        #Step A: First invokes any pre-call hooks, potentially modifying the message
-        print("\n\nPrehook: ", model_input_message)
-        for name, hook in self.pre_call_hooks.items():
-            model_input_message = hook(
-                model_input_message,
-                shell,
-                **kwargs,
-            )
+        llm_prompt = ""
+        
+        for input_no in range(len(parsed_history)):
+            llm_prompt += f"Clinical Researcher: {parsed_history[input_no]}\n\n"
+            if input_no < len(llm_responses):
+                llm_prompt += f"AI Research Assistant: {llm_responses[input_no]}\n\n"
+            else:
+                llm_prompt += f"AI Research Assistant: "
 
 
-        #Step B: Passes the possibly modified message to the guidance program
-        #For interpretation and response generation
-        print("\n\nPosthook, right before guidance program: ", model_input_message)
-        raw_program_response = self.guidance_program(
-            **model_input_message, llm=llm, **kwargs
-        )
+        llm_response = query_llm(llm_prompt, sys_prompt)
 
-        response = raw_program_response
-        print("\n\nAfter execution, have response: ", response)
+        # print("\n\n")
+        # print(llm_prompt, "\n\n")
+        # print("AI response: ")
+        # print(llm_response)
 
-        # print("\n\n!!Got raw_program_response:", raw_program_response)
-
-        #Step 3: Passes the message to process any of the assistant's raw responses
-        for name, hook in self.post_call_hooks.items():
-            response = hook(
-                response,
-                shell,
-                **kwargs,
-            )
-
-        # print("\n\nGot final response", response)
-
-        return response
-
-
-# default_coding_guidance_program = guidance(
-#     """
-# {{#system~}}
-# You are a helpful and assistant and you are chatting with an python programmer.
-
-# {{~/system}}
-
-# {{#user~}}
-# From now on, you are ought to generate only the python code based on the description from the programmer.
-# {{~/user}}
-
-# {{#assistant~}}
-# Ok, I will do that. Let's do a practice round.
-# {{~/assistant}}
-
-# {{#user~}}
-# Load the json file called orca.json
-# {{~/user}}
-
-# {{#assistant~}}
-# import json 
-# with open('orca.json') as file:
-#     data = json.load(file)
-# {{~/assistant}}
-
-# {{#user~}}
-# That was great, now let's do another one.
-# {{~/user}}
-
-# {{#assistant~}}
-# Sounds good.
-# {{~/assistant}}
-
-# {{#user~}}
-# {{current_message}}
-# {{~/user}}
-
-# {{#assistant~}}
-# {{gen 'code' temperature=0 max_tokens=2048}}
-# {{~/assistant}}
-# """
-# )
-
-default_coding_guidance_program = guidance(
-    """
-{{#system~}}
-You are a helpful and assistant and you are chatting with an programmer interested in retrieving data from the MIMIC-III SQL database on AWS Athena.
-{{~/system}}
-
-{{#user~}}
-From now on, you are ought to generate only SQL code based on the description from the programmer.
-{{~/user}}
-
-{{#assistant~}}
-Ok, I will do that.
-{{~/assistant}}
-
-{{#user~}}
-{{current_message}}
-{{~/user}}
-
-{{#assistant~}}
-{{gen 'code' temperature=0 max_tokens=2048}}
-{{~/assistant}}
-"""
-)
+        return llm_response
 
 
 MARKDOWN_CODE_PATTERN = re.compile(r"`{3}([\w]*)\n([\S\s]+?)\n`{3}")
@@ -180,40 +122,19 @@ def clean_response_str(raw_response_str: str):
     return "\n".join(all_converted_str)
 
 
-_DEFAULT_PROGRAM = ChapyterAgentProgram(
-    guidance_program=default_coding_guidance_program,
-    pre_call_hooks={
-        "wrap_to_dict": (lambda x, shell, **kwargs: {"current_message": x})
-    },
-    post_call_hooks={
-        "extract_markdown_code": (
-            lambda raw_response_str, shell, **kwargs: clean_response_str(
-                raw_response_str["code"]
-            )
-        )
-    },
-)
+def clean_execution_history(s):
+    # Remove triple backticks
+    s = s.replace('```', '')
+    
+    # Remove leading and closing newline characters
+    s = s.strip()
+    
+    # Remove the %%mimic --safe -h
+    s = s.replace('%%mimicSQL', '').strip()
+    s = s.replace('%%mimicPython', '').strip()
 
-default_coding_history_guidance_program = guidance(
-    """
-{{#system~}}
-You are a helpful and assistant and you are chatting with an programmer interested in retrieving data from the MIMIC-III SQL database on AWS Athena.
-If they ask for something that is answerable with a SQL query, make sure there is only one SELECT statement.
-{{~/system}}
-
-{{#user~}}
-Here is my code so far:
-{{code_history}}
-{{~/user}}
-
-{{#assistant~}}
-{{gen 'code' temperature=0 max_tokens=2048}}
-{{~/assistant}}
-"""
-)
-# we don't need to add the {{current_instruction}} below {{code_history}}
-# in the template above, because after executing the current chapyter cell,
-# the instruction will be added to the history already.
+    
+    return s
 
 
 def get_execution_history(ipython, get_output=True, width=4):
@@ -252,22 +173,29 @@ def get_execution_history(ipython, get_output=True, width=4):
             history_str += "\nOutput:\n" + limit_output(output.strip())
 
         history_strs.append(history_str + "\n")
-    return "\n".join(history_strs)
+
+    history_strs = [clean_execution_history(s) for s in history_strs]
+
+    return history_strs
 
 
-def clean_response_str_in_interpreter(raw_response_str):
-    raw_response_str = raw_response_str.strip()
-    # Remove the leading ">>>"
-    raw_response_str = raw_response_str.lstrip(">>> ")
-    # Split the string into lines
-    lines = raw_response_str.split("\n... ")
-    # Join the lines back together with newline characters
-    raw_response_str = "\n".join(lines)
-    # If the string ends with "...", remove it
-    if raw_response_str.endswith("..."):
-        raw_response_str = raw_response_str[:-3]
+default_coding_history_guidance_program = guidance(
+    """
+{{#system~}}
+You are a helpful and assistant and you are chatting with an programmer interested in retrieving data from the MIMIC-III SQL database on AWS Athena.
+If they ask for something that is answerable with a SQL query, make sure there is only one SELECT statement.
+{{~/system}}
 
-    return raw_response_str.strip()
+{{#user~}}
+Here is my code so far:
+{{llm_conversation}}
+{{~/user}}
+
+{{#assistant~}}
+{{gen 'code' temperature=0 max_tokens=2048}}
+{{~/assistant}}
+"""
+)
 
 
 _DEFAULT_HISTORY_PROGRAM = ChapyterAgentProgram(
@@ -275,7 +203,7 @@ _DEFAULT_HISTORY_PROGRAM = ChapyterAgentProgram(
     pre_call_hooks={
         "add_execution_history": (
             lambda raw_message, shell, **kwargs: {
-                "code_history": get_execution_history(shell),
+                "llm_conversation": get_execution_history(shell),
             }
         )
     },
@@ -286,30 +214,4 @@ _DEFAULT_HISTORY_PROGRAM = ChapyterAgentProgram(
             )
         )
     },
-)
-
-
-default_chatonly_guidance_program = guidance(
-    """
-{{#system~}}
-You are a helpful assistant that helps people find information.
-{{~/system}}
-
-{{#user~}}
-{{current_message}}
-{{~/user}}
-
-{{#assistant~}}
-{{gen "response" max_tokens=1024}}
-{{~/assistant}}
-"""
-)
-
-
-_DEFAULT_CHATONLY_PROGRAM = ChapyterAgentProgram(
-    guidance_program=default_chatonly_guidance_program,
-    pre_call_hooks={
-        "wrap_to_dict": (lambda x, shell, **kwargs: {"current_message": x})
-    },
-    post_call_hooks={"extract_response": (lambda x, shell, **kwargs: x["response"])},
 )

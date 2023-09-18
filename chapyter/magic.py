@@ -8,7 +8,6 @@ from IPython.display import display
 
 
 import sys
-print(sys.path)
 from langchain.chat_models import ChatOpenAI
 from .LLMimic_app import query_llm, sql_query_to_athena_df
 
@@ -16,8 +15,6 @@ DATABASE = 'mimiciii'
 S3_BUCKET = 's3://emmett-athena-bucket/'
 AWS_REGION = 'us-east-1'
 LLM = ChatOpenAI(model_name="gpt-4", max_tokens=2000)
-
-
 
 
 import dotenv
@@ -39,17 +36,16 @@ from traitlets import Bool, Dict, Instance, Unicode, default, observe  # noqa
 from traitlets.config.loader import Config
 
 from .programs import (
-    _DEFAULT_CHATONLY_PROGRAM,
     _DEFAULT_HISTORY_PROGRAM,
-    _DEFAULT_PROGRAM,
     ChapyterAgentProgram,
 )
 
+llm_responses = []
+
 logger = logging.getLogger(__name__)
 
-_DEFAULT_PROGRAM_NAME = "_default"
 _DEFAULT_HISTORY_PROGRAM_NAME = "_default_history"
-_DEFAULT_CHATONLY_PROGRAM_NAME = "_default_chatonly"
+
 
 
 @magics_class
@@ -166,9 +162,7 @@ Will add more soon.
         # Initialize default programs
         self._programs = {}
         for program_name, program in [
-            (_DEFAULT_PROGRAM_NAME, _DEFAULT_PROGRAM),
             (_DEFAULT_HISTORY_PROGRAM_NAME, _DEFAULT_HISTORY_PROGRAM),
-            (_DEFAULT_CHATONLY_PROGRAM_NAME, _DEFAULT_CHATONLY_PROGRAM),
         ]:
             self._register_program(program_name, program)
 
@@ -234,12 +228,8 @@ Will add more soon.
         chatonly: bool = False,
     ) -> ChapyterAgentProgram:
         if args.program is None:
-            if chatonly:
-                return self._programs[_DEFAULT_CHATONLY_PROGRAM_NAME]
-            if not args.history:
-                return self._programs[_DEFAULT_PROGRAM_NAME]
-            else:
-                return self._programs[_DEFAULT_HISTORY_PROGRAM_NAME]
+ 
+            return self._programs[_DEFAULT_HISTORY_PROGRAM_NAME]
         else:
             # TODO: This part is a bit messy, need to clean up
             # So the current logic is that we allow users to pass in a program
@@ -262,6 +252,8 @@ Will add more soon.
         message: str,
         args: argparse.Namespace,
         shell: InteractiveShell,
+        sys_prompt: str,
+        llm_responses: list,
         **kwargs,
     ):
         
@@ -274,6 +266,8 @@ Will add more soon.
             llm=llm,
             shell=shell,
             silent=not args.verbose,
+            sys_prompt=sys_prompt,
+            llm_responses=llm_responses,
             **kwargs,
         )
         return response
@@ -321,15 +315,17 @@ Will add more soon.
 
         program_out = self.execute_chat(current_message, args, self.shell)
         execution_id = self.shell.execution_count
-        program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + program_out
 
         #Emmett for executing SQl code
         sys_prompt = "You are an expert coder. If the text/code sent to you contains a SQL query, respond with only the SQL query found, which is directly executable in Athena. Don't return the query in the form of a triple string. Change things that look like 'mimic.mimiciii.patients' to simply 'patients'. Otherwise respond only 'NO SQL FOUND'."
         contains_SQL = query_llm(program_out, sys_prompt)
         if contains_SQL != "NO SQL FOUND": #If the response has SQL in it, execute it, get df and store it
-            df = sql_query_to_athena_df(contains_SQL)
+            df, sql_query = sql_query_to_athena_df(contains_SQL)
             display(df.head(5))
             self.shell.user_ns['df'] = df
+
+        program_out = f"# AAssistant Code for Cell [{execution_id}]:\n" + program_out
+        # program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + sql_query
 
         self.shell.set_next_input(program_out)
 
@@ -368,28 +364,45 @@ Will add more soon.
         help="Whether to set slient=True for guidance calls.",
     )
     @line_cell_magic
-    def mimic(self, line, cell=None):
+    def mimicSQL(self, line, cell=None):
         args = parse_argstring(self.chat, line)
 
         if cell is None:
             return
         current_message = cell
 
-        program_out = self.execute_chat(current_message, args, self.shell)
+        overall_sys_prompt = """
+                     You are a Medical AI Research Assistant, helping a Clinical Researcher do analyses of the MIMIC-III dataset on AWS Athena.
+                     If possible, respond to the Clinical Researcher with a SQL query to retrieve their relevant dataset.
+                     If there is no dataset obvious to retrieve from, answer in general from your information and the past conversation.                     
+                     """
+
+
+        program_out = self.execute_chat(current_message, args, self.shell, overall_sys_prompt, llm_responses)
+
         execution_id = self.shell.execution_count
-        program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + program_out
 
         #Emmett for executing SQl code
         sys_prompt = "You are an expert coder. If the text/code sent to you contains a SQL query, respond with only the SQL query found, which is directly executable in Athena. Don't return the query in the form of a triple string. Change things that look like 'mimic.mimiciii.patients' to simply 'patients'. Otherwise respond only 'NO SQL FOUND'."
         contains_SQL = query_llm(program_out, sys_prompt)
         if contains_SQL != "NO SQL FOUND": #If the response has SQL in it, execute it, get df and store it
-            df = sql_query_to_athena_df(contains_SQL)
+            df, sql_query = sql_query_to_athena_df(contains_SQL)
             display(df.head(5))
             self.shell.user_ns['df'] = df
 
+            first_two_rows_str = df.head(2).to_string()
+            to_llm_history = program_out + "\n" + "First two rows of the df below:" + "\n" + first_two_rows_str        
+            llm_responses.append(to_llm_history)
+        else:
+            print(program_out)
+            llm_responses.append(program_out)
+
+
+
+        program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + program_out
+        # program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + sql_query
+
         self.shell.set_next_input(program_out)
-
-
 
 
     @magic_arguments()
@@ -397,8 +410,27 @@ Will add more soon.
         "--model",
         "-m",
         type=str,
-        default="gpt-4",
+        default=None,
         help="The model to be used for the chat interface.",
+    )
+    @argument(
+        "--history",
+        "-h",
+        action="store_true",
+        help="Whether to use history for the code.",
+    )
+    @argument(
+        "--program",
+        "-p",
+        type=Any,
+        default=None,
+        help="The program to be used for the chat interface.",
+    )
+    @argument(
+        "--safe",
+        "-s",
+        action="store_true",
+        help="Activate safe Mode that the code won't be automatically executed.",
     )
     @argument(
         "--verbose",
@@ -407,17 +439,61 @@ Will add more soon.
         help="Whether to set slient=True for guidance calls.",
     )
     @line_cell_magic
-    def chatonly(self, line, cell=None):
+    def mimicPython(self, line, cell=None):
         args = parse_argstring(self.chat, line)
+
+        overall_sys_prompt = """
+                     You are a Medical AI Research Assistant, helping a Clinical Researcher do analysis on their dataframe.
+                     If possible, respond to the Clinical Researcher with python code to help them perform their analysis.
+                     If the conversation doesn't require python code at this moment, simply respond based on the past conversation and your knowledge of the dataset.                     
+                     """
+
+
 
         if cell is None:
             return
         current_message = cell
 
-        program_out = self.execute_chat(
-            current_message, args, self.shell, chatonly=True
-        )
-        # print(program_out)
+        #execute chat calls the LLM, and adds it to the history
+        program_out = self.execute_chat(current_message, args, self.shell, overall_sys_prompt, llm_responses)
+
+        execution_id = self.shell.execution_count
+
+        sys_prompt = """You are an expert coder. 
+        If the text/code sent to you contains python code, respond with only the python code found. 
+        Don't assume the datatypes in the table are anything. Assume in any df, that all values are strings and convert them to numbers as necessary.
+        No comments. Should be directly executable. Assume we already have the dataframe called 'df', if one is needed. 
+        MUST return a variable called 'answer' Otherwise respond only 'NO PYTHON CODE FOUND'.
+        """
+
+        contains_python = query_llm(program_out, sys_prompt)
+        if contains_python != "NO PYTHON CODE FOUND": # and isinstance(st.session_state.df, pd.DataFrame):
+
+            #Now that we got the code, lets analyze our df, need to retrieve from session state dict            
+            #And then we will execute the code on the fly
+            try:
+                df = self.shell.user_ns['df']
+                context = {'df': df}
+                exec(contains_python, globals(), context)
+                answer = context.get('answer', None)
+
+            except:
+                exec(contains_python, globals())
+                answer = context.get('answer')
+
+            calculated_answer_string = f"Result : {answer}"
+            print(calculated_answer_string)
+        else:
+            print(program_out)
+            calculated_answer_string = ""
+
+        to_llm_history = program_out + "\n" + calculated_answer_string
+        llm_responses.append(to_llm_history)
+
+        program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + program_out + "\n" + calculated_answer_string + "\n"
+        self.shell.set_next_input(program_out)
+
+
 
     @line_magic
     def chapyter_load_agent(self, line=None):
