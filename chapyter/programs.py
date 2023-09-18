@@ -37,6 +37,7 @@ class ChapyterAgentProgram:
         # print("Executing with message:", message, "\n\n")
 
         #Step A: First invokes any pre-call hooks, potentially modifying the message
+        print("\n\nPrehook: ", model_input_message)
         for name, hook in self.pre_call_hooks.items():
             model_input_message = hook(
                 model_input_message,
@@ -44,15 +45,16 @@ class ChapyterAgentProgram:
                 **kwargs,
             )
 
-            # print("\n\nHook", model_input_message)
 
         #Step B: Passes the possibly modified message to the guidance program
         #For interpretation and response generation
+        print("\n\nPosthook, right before guidance program: ", model_input_message)
         raw_program_response = self.guidance_program(
             **model_input_message, llm=llm, **kwargs
         )
 
         response = raw_program_response
+        print("\n\nAfter execution, have response: ", response)
 
         # print("\n\n!!Got raw_program_response:", raw_program_response)
 
