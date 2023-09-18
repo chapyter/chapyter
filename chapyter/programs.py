@@ -12,9 +12,9 @@ from IPython.core.interactiveshell import InteractiveShell
 
 __all__ = [
     "ChapyterAgentProgram",
-    "_DEFAULT_PROGRAM",
     "_DEFAULT_HISTORY_PROGRAM",
 ]
+
 
 @dataclasses.dataclass
 class ChapyterAgentProgram:
@@ -49,6 +49,7 @@ class ChapyterAgentProgram:
         #Step B: Passes the possibly modified message to the guidance program
         #For interpretation and response generation
         print("\n\nPosthook, right before guidance program: ", model_input_message)
+        print(f"In guidance, will be plugging in {model_input_message} AND {kwargs}")
         raw_program_response = self.guidance_program(
             **model_input_message, llm=llm, **kwargs
         )
@@ -67,76 +68,8 @@ class ChapyterAgentProgram:
             )
 
         # print("\n\nGot final response", response)
-
+        print("\n\nReturning response!")
         return response
-
-
-# default_coding_guidance_program = guidance(
-#     """
-# {{#system~}}
-# You are a helpful and assistant and you are chatting with an python programmer.
-
-# {{~/system}}
-
-# {{#user~}}
-# From now on, you are ought to generate only the python code based on the description from the programmer.
-# {{~/user}}
-
-# {{#assistant~}}
-# Ok, I will do that. Let's do a practice round.
-# {{~/assistant}}
-
-# {{#user~}}
-# Load the json file called orca.json
-# {{~/user}}
-
-# {{#assistant~}}
-# import json 
-# with open('orca.json') as file:
-#     data = json.load(file)
-# {{~/assistant}}
-
-# {{#user~}}
-# That was great, now let's do another one.
-# {{~/user}}
-
-# {{#assistant~}}
-# Sounds good.
-# {{~/assistant}}
-
-# {{#user~}}
-# {{current_message}}
-# {{~/user}}
-
-# {{#assistant~}}
-# {{gen 'code' temperature=0 max_tokens=2048}}
-# {{~/assistant}}
-# """
-# )
-
-default_coding_guidance_program = guidance(
-    """
-{{#system~}}
-You are a helpful and assistant and you are chatting with an programmer interested in retrieving data from the MIMIC-III SQL database on AWS Athena.
-{{~/system}}
-
-{{#user~}}
-From now on, you are ought to generate only SQL code based on the description from the programmer.
-{{~/user}}
-
-{{#assistant~}}
-Ok, I will do that.
-{{~/assistant}}
-
-{{#user~}}
-{{current_message}}
-{{~/user}}
-
-{{#assistant~}}
-{{gen 'code' temperature=0 max_tokens=2048}}
-{{~/assistant}}
-"""
-)
 
 
 MARKDOWN_CODE_PATTERN = re.compile(r"`{3}([\w]*)\n([\S\s]+?)\n`{3}")
@@ -180,42 +113,6 @@ def clean_response_str(raw_response_str: str):
     return "\n".join(all_converted_str)
 
 
-_DEFAULT_PROGRAM = ChapyterAgentProgram(
-    guidance_program=default_coding_guidance_program,
-    pre_call_hooks={
-        "wrap_to_dict": (lambda x, shell, **kwargs: {"current_message": x})
-    },
-    post_call_hooks={
-        "extract_markdown_code": (
-            lambda raw_response_str, shell, **kwargs: clean_response_str(
-                raw_response_str["code"]
-            )
-        )
-    },
-)
-
-default_coding_history_guidance_program = guidance(
-    """
-{{#system~}}
-You are a helpful and assistant and you are chatting with an programmer interested in retrieving data from the MIMIC-III SQL database on AWS Athena.
-If they ask for something that is answerable with a SQL query, make sure there is only one SELECT statement.
-{{~/system}}
-
-{{#user~}}
-Here is my code so far:
-{{code_history}}
-{{~/user}}
-
-{{#assistant~}}
-{{gen 'code' temperature=0 max_tokens=2048}}
-{{~/assistant}}
-"""
-)
-# we don't need to add the {{current_instruction}} below {{code_history}}
-# in the template above, because after executing the current chapyter cell,
-# the instruction will be added to the history already.
-
-
 def get_execution_history(ipython, get_output=True, width=4):
     def limit_output(output, limit=100):
         """Limit the output to a certain number of words."""
@@ -255,19 +152,23 @@ def get_execution_history(ipython, get_output=True, width=4):
     return "\n".join(history_strs)
 
 
-def clean_response_str_in_interpreter(raw_response_str):
-    raw_response_str = raw_response_str.strip()
-    # Remove the leading ">>>"
-    raw_response_str = raw_response_str.lstrip(">>> ")
-    # Split the string into lines
-    lines = raw_response_str.split("\n... ")
-    # Join the lines back together with newline characters
-    raw_response_str = "\n".join(lines)
-    # If the string ends with "...", remove it
-    if raw_response_str.endswith("..."):
-        raw_response_str = raw_response_str[:-3]
+default_coding_history_guidance_program = guidance(
+    """
+{{#system~}}
+You are a helpful and assistant and you are chatting with an programmer interested in retrieving data from the MIMIC-III SQL database on AWS Athena.
+If they ask for something that is answerable with a SQL query, make sure there is only one SELECT statement.
+{{~/system}}
 
-    return raw_response_str.strip()
+{{#user~}}
+Here is my code so far:
+{{llm_conversation}}
+{{~/user}}
+
+{{#assistant~}}
+{{gen 'code' temperature=0 max_tokens=2048}}
+{{~/assistant}}
+"""
+)
 
 
 _DEFAULT_HISTORY_PROGRAM = ChapyterAgentProgram(
@@ -275,7 +176,7 @@ _DEFAULT_HISTORY_PROGRAM = ChapyterAgentProgram(
     pre_call_hooks={
         "add_execution_history": (
             lambda raw_message, shell, **kwargs: {
-                "code_history": get_execution_history(shell),
+                "llm_conversation": get_execution_history(shell),
             }
         )
     },
@@ -286,30 +187,4 @@ _DEFAULT_HISTORY_PROGRAM = ChapyterAgentProgram(
             )
         )
     },
-)
-
-
-default_chatonly_guidance_program = guidance(
-    """
-{{#system~}}
-You are a helpful assistant that helps people find information.
-{{~/system}}
-
-{{#user~}}
-{{current_message}}
-{{~/user}}
-
-{{#assistant~}}
-{{gen "response" max_tokens=1024}}
-{{~/assistant}}
-"""
-)
-
-
-_DEFAULT_CHATONLY_PROGRAM = ChapyterAgentProgram(
-    guidance_program=default_chatonly_guidance_program,
-    pre_call_hooks={
-        "wrap_to_dict": (lambda x, shell, **kwargs: {"current_message": x})
-    },
-    post_call_hooks={"extract_response": (lambda x, shell, **kwargs: x["response"])},
 )

@@ -18,8 +18,6 @@ AWS_REGION = 'us-east-1'
 LLM = ChatOpenAI(model_name="gpt-4", max_tokens=2000)
 
 
-
-
 import dotenv
 import guidance
 from IPython.core.error import UsageError
@@ -39,17 +37,13 @@ from traitlets import Bool, Dict, Instance, Unicode, default, observe  # noqa
 from traitlets.config.loader import Config
 
 from .programs import (
-    _DEFAULT_CHATONLY_PROGRAM,
     _DEFAULT_HISTORY_PROGRAM,
-    _DEFAULT_PROGRAM,
     ChapyterAgentProgram,
 )
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_PROGRAM_NAME = "_default"
 _DEFAULT_HISTORY_PROGRAM_NAME = "_default_history"
-_DEFAULT_CHATONLY_PROGRAM_NAME = "_default_chatonly"
 
 
 @magics_class
@@ -166,9 +160,7 @@ Will add more soon.
         # Initialize default programs
         self._programs = {}
         for program_name, program in [
-            (_DEFAULT_PROGRAM_NAME, _DEFAULT_PROGRAM),
             (_DEFAULT_HISTORY_PROGRAM_NAME, _DEFAULT_HISTORY_PROGRAM),
-            (_DEFAULT_CHATONLY_PROGRAM_NAME, _DEFAULT_CHATONLY_PROGRAM),
         ]:
             self._register_program(program_name, program)
 
@@ -389,35 +381,6 @@ Will add more soon.
 
         self.shell.set_next_input(program_out)
 
-
-
-
-    @magic_arguments()
-    @argument(
-        "--model",
-        "-m",
-        type=str,
-        default="gpt-4",
-        help="The model to be used for the chat interface.",
-    )
-    @argument(
-        "--verbose",
-        "-v",
-        action="store_true",
-        help="Whether to set slient=True for guidance calls.",
-    )
-    @line_cell_magic
-    def chatonly(self, line, cell=None):
-        args = parse_argstring(self.chat, line)
-
-        if cell is None:
-            return
-        current_message = cell
-
-        program_out = self.execute_chat(
-            current_message, args, self.shell, chatonly=True
-        )
-        # print(program_out)
 
     @line_magic
     def chapyter_load_agent(self, line=None):
