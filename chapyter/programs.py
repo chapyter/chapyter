@@ -59,21 +59,7 @@ class ChapyterAgentProgram:
     #This is step 3, execute
     def execute(self, message: str, llm: str, shell: InteractiveShell, sys_prompt: str, llm_responses: list, **kwargs) -> str:
 
-        parsed_history = get_execution_history(shell)
-
-        sys_prompt = sys_prompt
-
-        llm_prompt = ""
-        
-        for input_no in range(len(parsed_history)):
-            llm_prompt += f"Clinical Researcher: {parsed_history[input_no]}\n\n"
-            if input_no < len(llm_responses):
-                llm_prompt += f"AI Research Assistant: {llm_responses[input_no]}\n\n"
-            else:
-                llm_prompt += f"AI Research Assistant: "
-
-
-        llm_response = query_llm(llm_prompt, sys_prompt)
+        llm_response = query_llm(message, sys_prompt)
 
         # print("\n\n")
         # print(llm_prompt, "\n\n")
@@ -143,7 +129,10 @@ import nbformat
 
 import pprint
 
-def get_notebook_ordered_history(notebook_name="01-quick-start.ipynb"):
+from IPython.core.display import display, HTML, Javascript
+
+
+def get_notebook_ordered_history(current_message, notebook_name="01-quick-start.ipynb"):
 
     #Extract "mimic" Human cells, keep them in order
     #Extract remaining AI cells, order doesnt matter
@@ -160,18 +149,32 @@ def get_notebook_ordered_history(notebook_name="01-quick-start.ipynb"):
     top_to_bottom_human_cells_inputs = []
     top_to_bottom_human_cells_outputs = []
     top_to_bottom_execution_counts = []
-    output_dict = {}
+    raw_llm_output_dict = {}
+
+    # print("CELLS", nb.cells)
+
     for cell in nb.cells:
+
+        # print("\n\n", cell)
+
         cell_input = cell["source"]
         cell_execution_count = cell["execution_count"]
         if "%%mimic" in cell_input:
+            # print("\n\n", cell)
             top_to_bottom_human_cells_inputs.append(cell_input.replace("\n\n", " --- "))
+            if current_message.strip() in cell_input.strip():
+                break
+
+
             top_to_bottom_execution_counts.append(cell_execution_count) 
             if "outputs" in cell:
-                # print(cell["outputs"])
                 outputs = cell["outputs"][0]
                 if "data" in outputs:
-                    top_to_bottom_human_cells_outputs.append(outputs["data"]["text/html"])
+                    if "text/html" in outputs["data"]:
+                        top_to_bottom_human_cells_outputs.append(outputs["data"]["text/html"])
+                    elif "text/markdown" in outputs["data"]:
+                        top_to_bottom_human_cells_outputs.append(outputs["data"]["text/markdown"])
+
                 elif "text" in outputs:
                     top_to_bottom_human_cells_outputs.append(outputs["text"])
         else:
@@ -179,58 +182,33 @@ def get_notebook_ordered_history(notebook_name="01-quick-start.ipynb"):
                 parts = cell_input.split("]:\n")
                 execution_response_no = parts[0].split("[")[-1]
                 code_generated = parts[1]
-                output_dict[int(execution_response_no)] = code_generated
+                raw_llm_output_dict[int(execution_response_no)] = code_generated
 
 
-    # print("Got ordered human cells", len(top_to_bottom_human_cells_inputs), top_to_bottom_human_cells_inputs)
-    # print("Got ordered execution counts", top_to_bottom_execution_counts)
-    # print("Got ordered human cells", len(top_to_bottom_human_cells_outputs), top_to_bottom_human_cells_outputs)
-    # print("Got output_dict", output_dict)
-
-    # print("\n\n\n")
     context = ""
     for human_input, AI_response_no, AI_computation in zip(top_to_bottom_human_cells_inputs, top_to_bottom_execution_counts, top_to_bottom_human_cells_outputs):
         context += f"**Clinical Researcher:** {human_input}\n\n"
-        context += f"**AI Research Assistant:** {output_dict[AI_response_no]}\n\n"
+        context += f"**AI Research Assistant:** {raw_llm_output_dict[AI_response_no]}\n\n"
         context += f"**Result of Analysis:** {AI_computation}\n\n"
         context += "="*60
         context += "\n\n"
 
+    # print(top_to_bottom_human_cells_inputs)
+    # print(top_to_bottom_human_cells_outputs)
+    # print([raw_llm_output_dict[i] for i in top_to_bottom_execution_counts])
+
+    context += f"**Clinical Researcher:** {top_to_bottom_human_cells_inputs[-1]}\n\n"
+    context += f"**AI Research Assistant:**"
+
+
+
+
     from IPython.display import display, Markdown
 
-    # print("Generated context:\n\n\n")
-    display(Markdown(context))
-    # print(context)
+    # print("Seeing pre-prompt")
+    # display(Markdown(context))
 
-
-
-
-
-    # for cell in nb.cells:
-    #     cell_input = cell["source"]
-    #     if "%%mimic" not in cell_input and "Assistant Code" not in cell_input:
-    #         continue
-    #     print(cell)
-
-
-    #     print("\n\n")
-    #     print("IN: ", cell["source"])
-    #     if len(cell["outputs"]) > 0:
-    #         output = cell["outputs"][0]
-    #         if "data" in output:
-    #             output_line = output["data"]["text/plain"]
-    #         elif output["output_type"] == "stream":
-    #             output_line = output["text"]
-    #         print("OUT: ", output_line)
-    #     else:
-    #         print("OUT: None")
-
-
-
-
-
-
-
+    return context
 
 def get_execution_history(ipython, get_output=True, width=4):
     def limit_output(output, limit=100):
