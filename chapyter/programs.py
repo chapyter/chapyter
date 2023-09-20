@@ -129,7 +129,14 @@ import nbformat
 
 import pprint
 
-from IPython.core.display import display, HTML, Javascript
+from IPython.core.display import display, HTML
+
+
+def extract_table(outputs):
+    for output in outputs:
+        if 'data' in output and 'text/plain' in output['data']:
+            return output['data']['text/plain']
+    return None
 
 
 def get_notebook_ordered_history(current_message, notebook_name="01-quick-start.ipynb"):
@@ -160,23 +167,25 @@ def get_notebook_ordered_history(current_message, notebook_name="01-quick-start.
         cell_input = cell["source"]
         cell_execution_count = cell["execution_count"]
         if "%%mimic" in cell_input:
-            # print("\n\n", cell)
+
+            #if in a mimic cell, take the input
             top_to_bottom_human_cells_inputs.append(cell_input.replace("\n\n", " --- "))
+
+            #break if this is the current cell
+            # print(f"Comparing '{current_message.strip()}' to '{cell_input.strip()}'")
             if current_message.strip() in cell_input.strip():
+                # print("Breaking!!!")
                 break
 
-
             top_to_bottom_execution_counts.append(cell_execution_count) 
-            if "outputs" in cell:
-                outputs = cell["outputs"][0]
-                if "data" in outputs:
-                    if "text/html" in outputs["data"]:
-                        top_to_bottom_human_cells_outputs.append(outputs["data"]["text/html"])
-                    elif "text/markdown" in outputs["data"]:
-                        top_to_bottom_human_cells_outputs.append(outputs["data"]["text/markdown"])
 
-                elif "text" in outputs:
-                    top_to_bottom_human_cells_outputs.append(outputs["text"])
+            #if a table is in the outputs, grab it!!!
+            if "outputs" in cell:
+                outputs = cell["outputs"]
+                table = extract_table(outputs)
+                top_to_bottom_human_cells_outputs.append(table)
+                    
+
         else:
             if "Assistant Code" in cell_input:
                 parts = cell_input.split("]:\n")
@@ -185,6 +194,7 @@ def get_notebook_ordered_history(current_message, notebook_name="01-quick-start.
                 raw_llm_output_dict[int(execution_response_no)] = code_generated
 
 
+    # print("\n\nGot outputs", top_to_bottom_human_cells_outputs)
     context = ""
     for human_input, AI_response_no, AI_computation in zip(top_to_bottom_human_cells_inputs, top_to_bottom_execution_counts, top_to_bottom_human_cells_outputs):
         context += f"**Clinical Researcher:** {human_input}\n\n"
@@ -207,6 +217,7 @@ def get_notebook_ordered_history(current_message, notebook_name="01-quick-start.
 
     # print("Seeing pre-prompt")
     # display(Markdown(context))
+    # print(context)
 
     return context
 
