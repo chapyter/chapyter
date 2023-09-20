@@ -328,7 +328,7 @@ Will add more soon.
         program_out = f"# AAssistant Code for Cell [{execution_id}]:\n" + program_out
         # program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + sql_query
 
-        self.shell.set_next_input(program_out)
+        # self.shell.set_next_input(program_out)
 
 
     @magic_arguments()
@@ -381,6 +381,7 @@ Will add more soon.
         context = get_notebook_ordered_history(current_message)
 
         program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt, llm_responses)
+        print(program_out)
 
         execution_id = self.shell.execution_count
 
@@ -396,15 +397,14 @@ Will add more soon.
             to_llm_history = program_out + "\n" + "First two rows of the df below:" + "\n" + first_two_rows_str        
             llm_responses.append(to_llm_history)
         else:
-            print(program_out)
             llm_responses.append(program_out)
 
 
 
-        program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + program_out
+        program_out = f"# Assistant Code for Cell [{execution_id}]:\n"# + program_out
         # program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + sql_query
 
-        self.shell.set_next_input(program_out)
+        # self.shell.set_next_input(program_out)
 
 
     @magic_arguments()
@@ -461,7 +461,7 @@ Will add more soon.
 
         program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt, llm_responses)
 
-        program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt, llm_responses)
+        print(program_out)
 
         execution_id = self.shell.execution_count
 
@@ -493,16 +493,16 @@ Will add more soon.
                 answer = context.get('answer')
 
             calculated_answer_string = f"Result : {answer}"
-            print(calculated_answer_string)
+            print("\n", calculated_answer_string)
         else:
-            print(program_out)
+            # print(program_out)
             calculated_answer_string = ""
 
         to_llm_history = program_out + "\n" + calculated_answer_string
         llm_responses.append(to_llm_history)
 
-        program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + program_out + "\n" + calculated_answer_string + "\n"
-        self.shell.set_next_input(program_out)
+        program_out = f"# Assistant Code for Cell [{execution_id}]:\n" #+ program_out + "\n" + calculated_answer_string + "\n"
+        # self.shell.set_next_input(program_out)
 
 
 

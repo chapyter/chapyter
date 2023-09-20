@@ -138,6 +138,12 @@ def extract_table(outputs):
             return output['data']['text/plain']
     return None
 
+def extract_text(outputs):
+    for output in outputs:
+        if 'text' in output:
+            return output['text']
+    return None
+
 
 def get_notebook_ordered_history(current_message, notebook_name="01-quick-start.ipynb"):
 
@@ -154,9 +160,8 @@ def get_notebook_ordered_history(current_message, notebook_name="01-quick-start.
         nb = nbformat.read(f, as_version=4)
 
     top_to_bottom_human_cells_inputs = []
-    top_to_bottom_human_cells_outputs = []
-    top_to_bottom_execution_counts = []
-    raw_llm_output_dict = {}
+    top_to_bottom_human_cells_output_tables = []
+    top_to_bottom_human_cells_output_text = []
 
     # print("CELLS", nb.cells)
 
@@ -177,13 +182,17 @@ def get_notebook_ordered_history(current_message, notebook_name="01-quick-start.
                 # print("Breaking!!!")
                 break
 
-            top_to_bottom_execution_counts.append(cell_execution_count) 
+            # top_to_bottom_execution_counts.append(cell_execution_count) 
 
             #if a table is in the outputs, grab it!!!
             if "outputs" in cell:
                 outputs = cell["outputs"]
+
                 table = extract_table(outputs)
-                top_to_bottom_human_cells_outputs.append(table)
+                text = extract_text(outputs)
+
+                top_to_bottom_human_cells_output_tables.append(table)
+                top_to_bottom_human_cells_output_text.append(text)
                     
 
         else:
@@ -191,15 +200,19 @@ def get_notebook_ordered_history(current_message, notebook_name="01-quick-start.
                 parts = cell_input.split("]:\n")
                 execution_response_no = parts[0].split("[")[-1]
                 code_generated = parts[1]
-                raw_llm_output_dict[int(execution_response_no)] = code_generated
+                # raw_llm_output_dict[int(execution_response_no)] = code_generated
 
 
     # print("\n\nGot outputs", top_to_bottom_human_cells_outputs)
-    context = ""
-    for human_input, AI_response_no, AI_computation in zip(top_to_bottom_human_cells_inputs, top_to_bottom_execution_counts, top_to_bottom_human_cells_outputs):
+    # print("LENGTHS", len(top_to_bottom_human_cells_inputs), len(top_to_bottom_human_cells_output_text), len(top_to_bottom_human_cells_output_tables))
+    context = "="*60
+    for human_input, AI_text, AI_table in zip(top_to_bottom_human_cells_inputs, top_to_bottom_human_cells_output_text, top_to_bottom_human_cells_output_tables):
+        # print("In loop")
         context += f"**Clinical Researcher:** {human_input}\n\n"
-        context += f"**AI Research Assistant:** {raw_llm_output_dict[AI_response_no]}\n\n"
-        context += f"**Result of Analysis:** {AI_computation}\n\n"
+        if AI_table != None:
+            context += f"**AI Research Assistant:** {AI_text}\n{AI_table}\n\n"
+        else:
+            context += f"**AI Research Assistant:** {AI_text}\n\n"
         context += "="*60
         context += "\n\n"
 
