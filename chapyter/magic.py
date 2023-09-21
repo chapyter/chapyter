@@ -3,6 +3,7 @@ import logging
 import os
 import re
 from typing import Any, Optional, Union  # noqa
+import pandas as pd
 
 from IPython.display import display
 
@@ -10,6 +11,7 @@ from IPython.display import display
 import sys
 from langchain.chat_models import ChatOpenAI
 from .LLMimic_app import query_llm, sql_query_to_athena_df
+from .programs import get_notebook_ordered_history
 
 DATABASE = 'mimiciii'
 S3_BUCKET = 's3://emmett-athena-bucket/'
@@ -327,7 +329,7 @@ Will add more soon.
         program_out = f"# AAssistant Code for Cell [{execution_id}]:\n" + program_out
         # program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + sql_query
 
-        self.shell.set_next_input(program_out)
+        # self.shell.set_next_input(program_out)
 
 
     @magic_arguments()
@@ -376,9 +378,11 @@ Will add more soon.
                      If possible, respond to the Clinical Researcher with a SQL query to retrieve their relevant dataset.
                      If there is no dataset obvious to retrieve from, answer in general from your information and the past conversation.                     
                      """
+                
+        context = get_notebook_ordered_history(current_message)
 
-
-        program_out = self.execute_chat(current_message, args, self.shell, overall_sys_prompt, llm_responses)
+        program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt, llm_responses)
+        print(program_out)
 
         execution_id = self.shell.execution_count
 
@@ -394,15 +398,14 @@ Will add more soon.
             to_llm_history = program_out + "\n" + "First two rows of the df below:" + "\n" + first_two_rows_str        
             llm_responses.append(to_llm_history)
         else:
-            print(program_out)
             llm_responses.append(program_out)
 
 
 
-        program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + program_out
+        program_out = f"# Assistant Code for Cell [{execution_id}]:\n"# + program_out
         # program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + sql_query
 
-        self.shell.set_next_input(program_out)
+        # self.shell.set_next_input(program_out)
 
 
     @magic_arguments()
@@ -444,7 +447,7 @@ Will add more soon.
 
         overall_sys_prompt = """
                      You are a Medical AI Research Assistant, helping a Clinical Researcher do analysis on their dataframe.
-                     If possible, respond to the Clinical Researcher with python code to help them perform their analysis.
+                     If possible, respond to the Clinical Researcher with python code to help them perform their analysis. Assume the past dataset is in a dataframe called 'df'.
                      If the conversation doesn't require python code at this moment, simply respond based on the past conversation and your knowledge of the dataset.                     
                      """
 
@@ -454,16 +457,20 @@ Will add more soon.
             return
         current_message = cell
 
-        #execute chat calls the LLM, and adds it to the history
-        program_out = self.execute_chat(current_message, args, self.shell, overall_sys_prompt, llm_responses)
+        context = get_notebook_ordered_history(current_message)
+        
+
+        program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt, llm_responses)
+
+        print(program_out)
 
         execution_id = self.shell.execution_count
 
         sys_prompt = """You are an expert coder. 
-        If the text/code sent to you contains python code, respond with only the python code found. 
+        If the text/code sent to you contains python code, respond with only the python code found. If no python code found, respond only with 'NO PYTHON CODE FOUND'.
         Don't assume the datatypes in the table are anything. Assume in any df, that all values are strings and convert them to numbers as necessary.
         No comments. Should be directly executable. Assume we already have the dataframe called 'df', if one is needed. 
-        MUST return a variable called 'answer' Otherwise respond only 'NO PYTHON CODE FOUND'.
+        If python code found, reformulate and return the python code so that it returns a variable called 'answer'.
         """
 
         contains_python = query_llm(program_out, sys_prompt)
@@ -471,27 +478,32 @@ Will add more soon.
 
             #Now that we got the code, lets analyze our df, need to retrieve from session state dict            
             #And then we will execute the code on the fly
+            # print("Going to exec", contains_python)
+
             try:
                 df = self.shell.user_ns['df']
                 context = {'df': df}
+                # print("SHAPAE OF THINGS", df.shape)
+                # print(df['gender'].value_counts())
                 exec(contains_python, globals(), context)
                 answer = context.get('answer', None)
 
-            except:
+            except Exception as e:
+                print("GOT EXCEPTION", e)
                 exec(contains_python, globals())
                 answer = context.get('answer')
 
             calculated_answer_string = f"Result : {answer}"
-            print(calculated_answer_string)
+            print("\n", calculated_answer_string)
         else:
-            print(program_out)
+            # print(program_out)
             calculated_answer_string = ""
 
         to_llm_history = program_out + "\n" + calculated_answer_string
         llm_responses.append(to_llm_history)
 
-        program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + program_out + "\n" + calculated_answer_string + "\n"
-        self.shell.set_next_input(program_out)
+        program_out = f"# Assistant Code for Cell [{execution_id}]:\n" #+ program_out + "\n" + calculated_answer_string + "\n"
+        # self.shell.set_next_input(program_out)
 
 
 

@@ -7,6 +7,8 @@ import dataclasses
 import re
 from typing import Any, Callable, Dict, Optional
 import openai
+import nbformat
+
 
 
 import guidance
@@ -57,21 +59,7 @@ class ChapyterAgentProgram:
     #This is step 3, execute
     def execute(self, message: str, llm: str, shell: InteractiveShell, sys_prompt: str, llm_responses: list, **kwargs) -> str:
 
-        parsed_history = get_execution_history(shell)
-
-        sys_prompt = sys_prompt
-
-        llm_prompt = ""
-        
-        for input_no in range(len(parsed_history)):
-            llm_prompt += f"Clinical Researcher: {parsed_history[input_no]}\n\n"
-            if input_no < len(llm_responses):
-                llm_prompt += f"AI Research Assistant: {llm_responses[input_no]}\n\n"
-            else:
-                llm_prompt += f"AI Research Assistant: "
-
-
-        llm_response = query_llm(llm_prompt, sys_prompt)
+        llm_response = query_llm(message, sys_prompt)
 
         # print("\n\n")
         # print(llm_prompt, "\n\n")
@@ -136,6 +124,117 @@ def clean_execution_history(s):
     
     return s
 
+
+import nbformat
+
+import pprint
+
+import pandas as pd
+
+from IPython.core.display import display, HTML
+
+
+def extract_table(outputs):
+    for output in outputs:
+        if 'data' in output and 'text/plain' in output['data']:
+            return output['data']['text/plain']
+    return None
+
+def extract_text(outputs):
+    for output in outputs:
+        if 'text' in output:
+            return output['text']
+    return None
+
+
+def get_notebook_ordered_history(current_message, notebook_name="02-sepsis-gender-age-distribution_detailed.ipynb"):
+
+    #Extract "mimic" Human cells, keep them in order
+    #Extract remaining AI cells, order doesnt matter
+
+    #For each Human cell:
+    #(1) Append Human input
+    #(2) Identify relevant AI cell, append AI code response
+    #(3)Then append Human output
+
+    # Load the current notebook
+    with open(notebook_name, "r", encoding="utf-8") as f:
+        nb = nbformat.read(f, as_version=4)
+
+    top_to_bottom_human_cells_inputs = []
+    top_to_bottom_human_cells_output_tables = []
+    top_to_bottom_human_cells_output_text = []
+
+    # print("CELLS", nb.cells)
+
+    for cell in nb.cells:
+
+        # print("\n\n", cell)
+
+        cell_input = cell["source"]
+        cell_execution_count = cell["execution_count"]
+        if "%%mimic" in cell_input:
+
+            #if in a mimic cell, take the input
+            top_to_bottom_human_cells_inputs.append(cell_input.replace("\n\n", " --- "))
+
+            #break if this is the current cell
+            # print(f"Comparing '{current_message.strip()}' to '{cell_input.strip()}'")
+            if current_message.strip() in cell_input.strip():
+                # print("Breaking!!!")
+                break
+
+            # top_to_bottom_execution_counts.append(cell_execution_count) 
+
+            #if a table is in the outputs, grab it!!!
+            if "outputs" in cell:
+                outputs = cell["outputs"]
+
+                table = extract_table(outputs)
+                text = extract_text(outputs)
+
+                top_to_bottom_human_cells_output_tables.append(table)
+                top_to_bottom_human_cells_output_text.append(text)
+                    
+
+        else:
+            if "Assistant Code" in cell_input:
+                parts = cell_input.split("]:\n")
+                execution_response_no = parts[0].split("[")[-1]
+                code_generated = parts[1]
+                # raw_llm_output_dict[int(execution_response_no)] = code_generated
+
+
+    # print("\n\nGot outputs", top_to_bottom_human_cells_outputs)
+    # print("LENGTHS", len(top_to_bottom_human_cells_inputs), len(top_to_bottom_human_cells_output_text), len(top_to_bottom_human_cells_output_tables))
+    context = "="*60
+    for human_input, AI_text, AI_table in zip(top_to_bottom_human_cells_inputs, top_to_bottom_human_cells_output_text, top_to_bottom_human_cells_output_tables):
+        # print("In loop")
+        context += f"**Clinical Researcher:** {human_input}\n\n"
+        if AI_table != None:
+            context += f"**AI Research Assistant:** {AI_text}\n{AI_table}\n\n"
+        else:
+            context += f"**AI Research Assistant:** {AI_text}\n\n"
+        context += "="*60
+        context += "\n\n"
+
+    # print(top_to_bottom_human_cells_inputs)
+    # print(top_to_bottom_human_cells_outputs)
+    # print([raw_llm_output_dict[i] for i in top_to_bottom_execution_counts])
+
+    context += f"**Clinical Researcher:** {top_to_bottom_human_cells_inputs[-1]}\n\n"
+    context += f"**AI Research Assistant:**"
+
+
+
+
+    from IPython.display import display, Markdown
+
+    # print("Seeing pre-prompt")
+    # display(Markdown(context))
+    # print(context)
+
+    return context
 
 def get_execution_history(ipython, get_output=True, width=4):
     def limit_output(output, limit=100):
