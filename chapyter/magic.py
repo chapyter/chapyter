@@ -3,6 +3,7 @@ import logging
 import os
 import re
 from typing import Any, Optional, Union  # noqa
+import pandas as pd
 
 from IPython.display import display
 

@@ -129,6 +129,8 @@ import nbformat
 
 import pprint
 
+import pandas as pd
+
 from IPython.core.display import display, HTML
 
 
@@ -145,7 +147,7 @@ def extract_text(outputs):
     return None
 
 
-def get_notebook_ordered_history(current_message, notebook_name="01-quick-start.ipynb"):
+def get_notebook_ordered_history(current_message, notebook_name="02-sepsis-gender-age-distribution_detailed.ipynb"):
 
     #Extract "mimic" Human cells, keep them in order
     #Extract remaining AI cells, order doesnt matter
