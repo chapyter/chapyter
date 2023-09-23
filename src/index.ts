@@ -278,6 +278,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
             }
           }
         }
+        // Steve getting the notebook name
+        var notebookName = linkedCellId.split('-')[0];
+        console.log(notebookName);
       }
     });
 

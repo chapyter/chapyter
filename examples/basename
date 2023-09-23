@@ -1,0 +1,51 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "d0539005",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%load_ext autoreload"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "ab804f35",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%autoreload 2"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "id": "67dfd180",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import openai\n",
+    "openai.api_key = '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'\n",
+    "\n",
+    "import os\n",
+    "os.environ['OPENAI_API_KEY']='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'"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "id": "661ab092",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%reload_ext chapyter"
+   ]
+  }
+ ],
+ "metadata": {},
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

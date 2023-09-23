@@ -7,6 +7,10 @@ import pandas as pd
 
 from IPython.display import display
 
+#steve imports
+import ipyparams
+import IPython.core.getipython 
+
 
 import sys
 from langchain.chat_models import ChatOpenAI
@@ -21,6 +25,7 @@ LLM = ChatOpenAI(model_name="gpt-4", max_tokens=2000)
 
 import dotenv
 import guidance
+from IPython import get_ipython
 from IPython.core.error import UsageError
 from IPython.core.interactiveshell import InteractiveShell
 from IPython.core.magic import (  # type: ignore
@@ -365,9 +370,15 @@ Will add more soon.
         action="store_true",
         help="Whether to set slient=True for guidance calls.",
     )
+    @argument(
+    "--notebook_name",  # Add this line for the new argument
+    type=str,           # Specify the argument type (str in this case)
+    default=None,       # Provide a default value if desired
+    help="The name of the notebook."
+    )
     @line_cell_magic
     def mimicSQL(self, line, cell=None):
-        args = parse_argstring(self.chat, line)
+        args = parse_argstring(self.mimicSQL, line)
 
         if cell is None:
             return
@@ -378,8 +389,27 @@ Will add more soon.
                      If possible, respond to the Clinical Researcher with a SQL query to retrieve their relevant dataset.
                      If there is no dataset obvious to retrieve from, answer in general from your information and the past conversation.                     
                      """
-                
-        context = get_notebook_ordered_history(current_message)
+        
+        #steve code begin
+        if args.notebook_name is None:
+            display("Error: Notebook name not provided as an argument in mimicSQL command")
+            return
+
+        #context = get_notebook_ordered_history(current_message, ipyparams.notebook_name)
+        from IPython.core.display import display
+        #display("test for notebook name1:", dir(get_ipython()))
+        #notebookName = get_ipython().get_notebook().get('metadata', {}).get('name', 'Untitled')
+        #display("test for notebook name:", notebookName)
+        #display("test for shell instance", )
+
+        #display("test for notebook name:", self.shell.get_ipython().run_line_magic('notebook', 'basename') )
+        #display("test for notebook name:", self.shell.get_ipython().run_line_magic('notebook','baseline'))
+        display("Actual notebook name: ", args.notebook_name)
+        context = get_notebook_ordered_history(current_message, args.notebook_name)
+        #context = get_notebook_ordered_history(current_message)
+        #steve code end
+
+        #context = get_notebook_ordered_history(current_message, args.notebook_name)
 
         program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt, llm_responses)
         print(program_out)
@@ -441,9 +471,15 @@ Will add more soon.
         action="store_true",
         help="Whether to set slient=True for guidance calls.",
     )
+    @argument(
+    "--notebook_name",  # Add this line for the new argument
+    type=str,           # Specify the argument type (str in this case)
+    default=None,       # Provide a default value if desired
+    help="The name of the notebook."
+    )
     @line_cell_magic
     def mimicPython(self, line, cell=None):
-        args = parse_argstring(self.chat, line)
+        args = parse_argstring(self.mimicPython, line)
 
         overall_sys_prompt = """
                      You are a Medical AI Research Assistant, helping a Clinical Researcher do analysis on their dataframe.
@@ -457,8 +493,7 @@ Will add more soon.
             return
         current_message = cell
 
-        context = get_notebook_ordered_history(current_message)
-        
+        context = get_notebook_ordered_history(current_message, args.notebook_name)
 
         program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt, llm_responses)
 
@@ -563,6 +598,16 @@ Will add more soon.
                 "- %chapyter <parameter_name>\n  print the current value of the parameter\n"
                 "- %chapyter <parameter_name>=<value>\n  set the value of the parameter"
             )
+
+#steve function
+#def custom_message_handler(msg):
+#    if msg['msg_type'] == 'custom_message':
+#        notebook_name = msg['content']['notebook_name']
+#        print(f"Received notebook name: {notebook_name}")
+#        # Process the notebook_name as needed
+
+#steve code
+#get_ipython().kernel.shell_handlers['custom_message'] = custom_message_handler
 
 
 def load_ipython_extension(ipython):
