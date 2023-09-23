@@ -80,13 +80,26 @@ def sql_query_to_athena_df(query):
 
     # Fetch results if query succeeded
     if response['QueryExecution']['Status']['State'] == 'SUCCEEDED':
-        result_data = client.get_query_results(QueryExecutionId=query_execution_id)
-        
-        # Convert the result to a pandas DataFrame
-        headers = [i['Name'] for i in result_data['ResultSet']['ResultSetMetadata']['ColumnInfo']]
-        rows = [[extract_value(cell) for cell in row['Data']] for row in result_data['ResultSet']['Rows'][1:]]
-        
-        df = pd.DataFrame(rows, columns=headers)
+        next_token = None  # Initialize the next_token
+        while True:
+            print("IN LOOP")
+            # If next_token is not None, pass it as a parameter in the get_query_results call
+            result_data = client.get_query_results(QueryExecutionId=query_execution_id, NextToken=next_token) if next_token else client.get_query_results(QueryExecutionId=query_execution_id)
+            
+            headers = [i['Name'] for i in result_data['ResultSet']['ResultSetMetadata']['ColumnInfo']]
+            rows = [[extract_value(cell) for cell in row['Data']] for row in result_data['ResultSet']['Rows'][1:]]
+            
+            if not df.empty:
+                df = pd.concat([df, pd.DataFrame(rows, columns=headers)], ignore_index=True)
+            else:
+                df = pd.DataFrame(rows, columns=headers)
+            
+            # If NextToken is present in the response, update the next_token variable for the next iteration
+            if 'NextToken' in result_data:
+                next_token = result_data['NextToken']
+            else:
+                break
+
     else:
         print("Query failed!")
 
