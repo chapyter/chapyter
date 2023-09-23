@@ -74,6 +74,22 @@ def sql_query_to_athena_df(query):
     if response['QueryExecution']['Status']['State'] == 'SUCCEEDED':
         # Initialize pagination token
         next_token = None
+    else:
+        # Log the state of the query execution
+        state = response['QueryExecution']['Status']['State']
+        print(f"Query failed! State: {state}")
+        
+        # Log the reason for query failure if available
+        if 'StateChangeReason' in response['QueryExecution']['Status']:
+            reason = response['QueryExecution']['Status']['StateChangeReason']
+            print(f"Reason: {reason}")
+        
+        # Optionally, you can also log the entire response object for more details
+        # import json
+        # print(json.dumps(response, indent=2))
+
+        return False, reason
+
         
     while True:
         # print("PAGINATING")
@@ -92,8 +108,6 @@ def sql_query_to_athena_df(query):
         next_token = result_data.get('NextToken')
         if not next_token:
             break
-    else:
-        print("Query failed!")
 
     return df, query
 
