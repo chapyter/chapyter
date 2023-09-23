@@ -1,0 +1,117 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "41cf9441",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%load_ext autoreload"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "119f3f5d",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%autoreload 2"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "id": "2b6bbfd7",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import openai\n",
+    "openai.api_key = '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'\n",
+    "\n",
+    "import os\n",
+    "os.environ['OPENAI_API_KEY']='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'"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "id": "3dd198e2",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%load_ext chapyter"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "id": "bdb70dd4",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%load_ext chapyter"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "id": "4265d883",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%reload_ext chapyter"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "id": "152d2f66",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%reload_ext chapyter"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "id": "bc76116a",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%%mimicSQL\n",
+    "\n",
+    "Hi"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "id": "0f27a657",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%%mimicSQL\n",
+    "\n",
+    "Hi"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "id": "f19e97bf",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%%mimicSQL\n",
+    "\n",
+    "Hi"
+   ]
+  }
+ ],
+ "metadata": {},
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
