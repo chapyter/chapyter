@@ -21,6 +21,7 @@ __all__ = [
 ]
 
 
+#tiny comment
 def extract_code_blocks(text):
     # Regular expression pattern to match code blocks between triple backticks
     pattern = r"```(.*?)```"

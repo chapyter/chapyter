@@ -414,6 +414,99 @@ Will add more soon.
         else:
             llm_responses.append(program_out_noSQL)
 
+
+    @magic_arguments()
+    @argument(
+        "--model",
+        "-m",
+        type=str,
+        default=None,
+        help="The model to be used for the chat interface.",
+    )
+    @argument(
+        "--history",
+        "-h",
+        action="store_true",
+        help="Whether to use history for the code.",
+    )
+    @argument(
+        "--program",
+        "-p",
+        type=Any,
+        default=None,
+        help="The program to be used for the chat interface.",
+    )
+    @argument(
+        "--safe",
+        "-s",
+        action="store_true",
+        help="Activate safe Mode that the code won't be automatically executed.",
+    )
+    @argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Whether to set slient=True for guidance calls.",
+    )
+    @argument(
+    "--notebook_name",  # Add this line for the new argument
+    type=str,           # Specify the argument type (str in this case)
+    default=None,       # Provide a default value if desired
+    help="The name of the notebook."
+    )
+    @line_cell_magic
+    def mimicSQL2(self, line, cell=None):
+        args = parse_argstring(self.mimicSQL, line)
+
+        if cell is None:
+            return
+        current_message = cell
+
+        overall_sys_prompt = """
+                     You are a Medical AI Research Assistant, helping a Clinical Researcher do analyses of the MIMIC-III dataset on AWS Athena.
+                     If possible, respond to the Clinical Researcher with a SQL query to retrieve their relevant dataset. 
+                     Never return more than one SQL query.
+                     If there is no dataset obvious to retrieve from, answer in general from your information and the past conversation.                     
+                     """
+        
+        #error if notebook name not provided
+        if args.notebook_name is None:
+            display("Error: Notebook name not provided as an argument in mimicSQL command. Use syntax: %%mimicSQL --notebook_name notebookNameHere.ipynb",)
+            return
+        
+        context = get_notebook_ordered_history(current_message, args.notebook_name)
+
+        program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt, llm_responses)
+
+        #regex to get rid of SQL in the response
+        #sql_pattern = r'```sql\n(.*?)\n```'
+        program_out_noSQL_list = program_out.split("```")
+        program_out_noSQL_list.pop(1)
+        program_out_noSQL = "".join(program_out_noSQL_list)
+
+        #print the response to jupyter notebook
+        print(program_out_noSQL)
+
+        execution_id = self.shell.execution_count
+
+        #Emmett for executing SQl code
+        sys_prompt = "You are an expert coder. If the text/code sent to you contains a SQL query, respond with only the SQL query found, which is directly executable in Athena. Don't return the query in the form of a triple string. Change things that look like 'mimic.mimiciii.patients' to simply 'patients'. Otherwise respond only 'NO SQL FOUND'."
+        contains_SQL = query_llm(program_out, sys_prompt)
+        if contains_SQL != "NO SQL FOUND": #If the response has SQL in it, create a new code block containing the query, get df and store it
+            # Generate JavaScript code to create a new cell below the current cell
+            self.shell.set_next_input(f'%%runSQL\n\n{contains_SQL}')
+
+        else:
+            llm_responses.append(program_out_noSQL)
+
+
+        program_out = f"# Assistant Code for Cell [{execution_id}]:\n"# + program_out
+        # program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + sql_query
+
+
+
+
+
     @magic_arguments()
     @argument(
         "--model",
