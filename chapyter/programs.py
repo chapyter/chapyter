@@ -150,8 +150,6 @@ def extract_text(outputs):
 #def get_notebook_ordered_history(current_message, notebook_name="01-sepsis-gender-distribution.ipynb"):
 #def get_notebook_ordered_history(current_message, notebook_name="01-sepsis-gender-distribution.ipynb"):
 def get_notebook_ordered_history(current_message, notebook_name):
-    from IPython.core.display import display
-    display("Notebook name:", notebook_name)
 
     #Extract "mimic" Human cells, keep them in order
     #Extract remaining AI cells, order doesnt matter

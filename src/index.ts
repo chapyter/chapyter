@@ -119,7 +119,7 @@ function isCellChapyterMagicCell(
   strict: boolean = false
 ): boolean {
   let codeCellText = cell.model.sharedModel.getSource();
-  if (codeCellText.startsWith('%chat') || codeCellText.startsWith('%%chat') || codeCellText.startsWith('%%mimicSQL') || codeCellText.startsWith('%%mimicPython')) {
+  if (codeCellText.startsWith('%chat') || codeCellText.startsWith('%%chat') || codeCellText.startsWith('%%mimicSQL') || codeCellText.startsWith('%%mimicPython') || codeCellText.startsWith('%%runSQL')) {
     if (!codeCellText.startsWith('%%chatonly') || !strict) {
       return true;
     }
@@ -180,6 +180,24 @@ const plugin: JupyterFrontEndPlugin<void> = {
   // optional: [ISettingRegistry],
   activate: (app: JupyterFrontEnd, tracker: INotebookTracker) => {
     NotebookActions.executed.connect((sender, args) => {
+
+      /*
+      //steve code to send notebook name to backend
+      if (args && args.cell) {
+        const notebookName = sender.notebook.notebook_name;
+
+        const msg = {
+            msg_type: 'custom_message',
+            content: {
+                notebook_name: notebookName
+            }
+        };
+
+        sender.notebook.kernel.sendShellMessage('custom_message', msg);
+    }
+    //end steve code
+    */
+
       if (args.success) {
         // It must be true that the cell is a code cell (otherwise it would not have been executed)
         let chatCell = args.cell as CodeCell;
@@ -278,9 +296,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
             }
           }
         }
-        // Steve getting the notebook name
-        var notebookName = linkedCellId.split('-')[0];
-        console.log(notebookName);
       }
     });
 

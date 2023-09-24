@@ -5,7 +5,7 @@ import re
 from typing import Any, Optional, Union  # noqa
 import pandas as pd
 
-from IPython.display import display
+from IPython.display import display, Javascript
 
 #steve imports
 import ipyparams
@@ -20,7 +20,7 @@ from .programs import get_notebook_ordered_history
 DATABASE = 'mimiciii'
 S3_BUCKET = 's3://emmett-athena-bucket/'
 AWS_REGION = 'us-east-1'
-LLM = ChatOpenAI(model_name="gpt-4", max_tokens=2000)
+LLM = ChatOpenAI(model_name="gpt-3.5", max_tokens=2000)
 
 
 import dotenv
@@ -386,50 +386,40 @@ Will add more soon.
 
         overall_sys_prompt = """
                      You are a Medical AI Research Assistant, helping a Clinical Researcher do analyses of the MIMIC-III dataset on AWS Athena.
-                     If possible, respond to the Clinical Researcher with a SQL query to retrieve their relevant dataset.
+                     If possible, respond to the Clinical Researcher with a SQL query to retrieve their relevant dataset. 
+                     Never return more than one SQL query.
                      If there is no dataset obvious to retrieve from, answer in general from your information and the past conversation.                     
                      """
         
-        #steve code begin
+        #error if notebook name not provided
         if args.notebook_name is None:
-            display("Error: Notebook name not provided as an argument in mimicSQL command")
+            display("Error: Notebook name not provided as an argument in mimicSQL command. Use syntax: %%mimicSQL --notebook_name notebookNameHere.ipynb",)
             return
-
-        #context = get_notebook_ordered_history(current_message, ipyparams.notebook_name)
-        from IPython.core.display import display
-        #display("test for notebook name1:", dir(get_ipython()))
-        #notebookName = get_ipython().get_notebook().get('metadata', {}).get('name', 'Untitled')
-        #display("test for notebook name:", notebookName)
-        #display("test for shell instance", )
-
-        #display("test for notebook name:", self.shell.get_ipython().run_line_magic('notebook', 'basename') )
-        #display("test for notebook name:", self.shell.get_ipython().run_line_magic('notebook','baseline'))
-        display("Actual notebook name: ", args.notebook_name)
+        
         context = get_notebook_ordered_history(current_message, args.notebook_name)
-        #context = get_notebook_ordered_history(current_message)
-        #steve code end
-
-        #context = get_notebook_ordered_history(current_message, args.notebook_name)
 
         program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt, llm_responses)
-        print(program_out)
+
+        #regex to get rid of SQL in the response
+        #sql_pattern = r'```sql\n(.*?)\n```'
+        program_out_noSQL_list = program_out.split("```")
+        program_out_noSQL_list.pop(1)
+        program_out_noSQL = "".join(program_out_noSQL_list)
+
+        #print the response to jupyter notebook
+        print(program_out_noSQL)
 
         execution_id = self.shell.execution_count
 
         #Emmett for executing SQl code
         sys_prompt = "You are an expert coder. If the text/code sent to you contains a SQL query, respond with only the SQL query found, which is directly executable in Athena. Don't return the query in the form of a triple string. Change things that look like 'mimic.mimiciii.patients' to simply 'patients'. Otherwise respond only 'NO SQL FOUND'."
         contains_SQL = query_llm(program_out, sys_prompt)
-        if contains_SQL != "NO SQL FOUND": #If the response has SQL in it, execute it, get df and store it
-            df, sql_query = sql_query_to_athena_df(contains_SQL)
-            display(df.head(5))
-            self.shell.user_ns['df'] = df
+        if contains_SQL != "NO SQL FOUND": #If the response has SQL in it, create a new code block containing the query, get df and store it
+            # Generate JavaScript code to create a new cell below the current cell
+            self.shell.set_next_input(f'%%runSQL\n\n{contains_SQL}')
 
-            first_two_rows_str = df.head(2).to_string()
-            to_llm_history = program_out + "\n" + "First two rows of the df below:" + "\n" + first_two_rows_str        
-            llm_responses.append(to_llm_history)
         else:
-            llm_responses.append(program_out)
-
+            llm_responses.append(program_out_noSQL)
 
 
         program_out = f"# Assistant Code for Cell [{execution_id}]:\n"# + program_out
@@ -541,6 +531,68 @@ Will add more soon.
         # self.shell.set_next_input(program_out)
 
 
+    @magic_arguments()
+    @argument(
+        "--model",
+        "-m",
+        type=str,
+        default=None,
+        help="The model to be used for the chat interface.",
+    )
+    @argument(
+        "--history",
+        "-h",
+        action="store_true",
+        help="Whether to use history for the code.",
+    )
+    @argument(
+        "--program",
+        "-p",
+        type=Any,
+        default=None,
+        help="The program to be used for the chat interface.",
+    )
+    @argument(
+        "--safe",
+        "-s",
+        action="store_true",
+        help="Activate safe Mode that the code won't be automatically executed.",
+    )
+    @argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Whether to set slient=True for guidance calls.",
+    )
+    @argument(
+    "--notebook_name",  # Add this line for the new argument
+    type=str,           # Specify the argument type (str in this case)
+    default=None,       # Provide a default value if desired
+    help="The name of the notebook."
+    )
+    @line_cell_magic
+    def runSQL(self, line, cell=None):
+        args = parse_argstring(self.runSQL, line)
+
+        if cell is None:
+            return
+        current_message = cell
+        
+        #error if notebook name not provided
+        if args.notebook_name is None:
+            display("Error: Notebook name not provided as an argument in mimicSQL command. Use syntax: %%mimicSQL --notebook_name notebookNameHere.ipynb",)
+            return
+
+        execution_id = self.shell.execution_count
+
+        df, sql_query = sql_query_to_athena_df(current_message)
+        display(df.head(5))
+        self.shell.user_ns['df'] = df
+
+        first_two_rows_str = df.head(2).to_string()
+        to_llm_history = "First two rows of the df below:" + "\n" + first_two_rows_str        
+        llm_responses.append(to_llm_history)
+
 
     @line_magic
     def chapyter_load_agent(self, line=None):
@@ -598,16 +650,6 @@ Will add more soon.
                 "- %chapyter <parameter_name>\n  print the current value of the parameter\n"
                 "- %chapyter <parameter_name>=<value>\n  set the value of the parameter"
             )
-
-#steve function
-#def custom_message_handler(msg):
-#    if msg['msg_type'] == 'custom_message':
-#        notebook_name = msg['content']['notebook_name']
-#        print(f"Received notebook name: {notebook_name}")
-#        # Process the notebook_name as needed
-
-#steve code
-#get_ipython().kernel.shell_handlers['custom_message'] = custom_message_handler
 
 
 def load_ipython_extension(ipython):
