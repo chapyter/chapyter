@@ -6,6 +6,7 @@ import openai
 import matplotlib
 import scipy
 import boto3
+import os
 import time
 
 from tabulate import tabulate
@@ -35,28 +36,21 @@ def dataframe_to_markdown(df):
     return tabulate(df, headers='keys', tablefmt='pipe')
 
 
-def sql_query_to_athena_df(query):
+def extract_value(cell):
+    """Extracts value from a cell returned by Athena. Supports multiple types."""
+    if 'VarCharValue' in cell:
+        return cell['VarCharValue']
+    elif 'LongValue' in cell:
+        return cell['LongValue']
+    elif 'DoubleValue' in cell:
+        return cell['DoubleValue']
+    else:
+        return None  # or you can return a default value or throw an exception
 
+def sql_query_to_athena_df(query):
     """
     Takes in a string query, and returns df from Athena
     """
-
-    def extract_value(cell):
-        """Extracts value from a cell returned by Athena. Supports multiple types."""
-        if 'VarCharValue' in cell:
-            return cell['VarCharValue']
-        elif 'LongValue' in cell:
-            return cell['LongValue']
-        elif 'DoubleValue' in cell:
-            return cell['DoubleValue']
-        # ... add more elif clauses for other types you want to support
-        else:
-            return None  # or you can return a default value or throw an exception
-        
-    # Execute the query
-    # print("\n\nEXECUTING QUERY\n\n")
-    # print(query)
-
     response = client.start_query_execution(
         QueryString=query,
         QueryExecutionContext={
@@ -69,39 +63,51 @@ def sql_query_to_athena_df(query):
 
     query_execution_id = response['QueryExecutionId']
 
-    # Check the query status until it's complete (this is a simple poll, you may want to adjust for longer queries)
     while True:
         response = client.get_query_execution(QueryExecutionId=query_execution_id)
         if response['QueryExecution']['Status']['State'] in ['SUCCEEDED', 'FAILED', 'CANCELLED']:
             break
-        time.sleep(5)  # Wait for 5 seconds before checking again
+        time.sleep(5)
 
-    df = pd.DataFrame()  # initialize an empty dataframe
+    df = pd.DataFrame()
 
-    # Fetch results if query succeeded
     if response['QueryExecution']['Status']['State'] == 'SUCCEEDED':
-        next_token = None  # Initialize the next_token
-        while True:
-            print("IN LOOP")
-            # If next_token is not None, pass it as a parameter in the get_query_results call
-            result_data = client.get_query_results(QueryExecutionId=query_execution_id, NextToken=next_token) if next_token else client.get_query_results(QueryExecutionId=query_execution_id)
-            
-            headers = [i['Name'] for i in result_data['ResultSet']['ResultSetMetadata']['ColumnInfo']]
-            rows = [[extract_value(cell) for cell in row['Data']] for row in result_data['ResultSet']['Rows'][1:]]
-            
-            if not df.empty:
-                df = pd.concat([df, pd.DataFrame(rows, columns=headers)], ignore_index=True)
-            else:
-                df = pd.DataFrame(rows, columns=headers)
-            
-            # If NextToken is present in the response, update the next_token variable for the next iteration
-            if 'NextToken' in result_data:
-                next_token = result_data['NextToken']
-            else:
-                break
-
+        # Initialize pagination token
+        next_token = None
     else:
-        print("Query failed!")
+        # Log the state of the query execution
+        state = response['QueryExecution']['Status']['State']
+        print(f"Query failed! State: {state}")
+        
+        # Log the reason for query failure if available
+        if 'StateChangeReason' in response['QueryExecution']['Status']:
+            reason = response['QueryExecution']['Status']['StateChangeReason']
+            print(f"Reason: {reason}")
+        
+        # Optionally, you can also log the entire response object for more details
+        # import json
+        # print(json.dumps(response, indent=2))
+
+        return False, reason
+
+        
+    while True:
+        # print("PAGINATING")
+        if next_token:
+            result_data = client.get_query_results(QueryExecutionId=query_execution_id, NextToken=next_token)
+        else:
+            result_data = client.get_query_results(QueryExecutionId=query_execution_id)
+        
+        headers = [i['Name'] for i in result_data['ResultSet']['ResultSetMetadata']['ColumnInfo']]
+        rows = [[extract_value(cell) for cell in row['Data']] for row in result_data['ResultSet']['Rows'][1:]]
+        
+        # Append the rows to the DataFrame using pd.concat
+        new_df = pd.DataFrame(rows, columns=headers)
+        df = pd.concat([df, new_df], ignore_index=True)
+        
+        next_token = result_data.get('NextToken')
+        if not next_token:
+            break
 
     return df, query
 

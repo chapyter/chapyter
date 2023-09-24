@@ -322,9 +322,13 @@ Will add more soon.
         sys_prompt = "You are an expert coder. If the text/code sent to you contains a SQL query, respond with only the SQL query found, which is directly executable in Athena. Don't return the query in the form of a triple string. Change things that look like 'mimic.mimiciii.patients' to simply 'patients'. Otherwise respond only 'NO SQL FOUND'."
         contains_SQL = query_llm(program_out, sys_prompt)
         if contains_SQL != "NO SQL FOUND": #If the response has SQL in it, execute it, get df and store it
-            df, sql_query = sql_query_to_athena_df(contains_SQL)
-            display(df.head(5))
-            self.shell.user_ns['df'] = df
+            try:
+                print("EXECUTING SQL")
+                df, sql_query = sql_query_to_athena_df(contains_SQL)
+                display(df.head(5))
+                self.shell.user_ns['df'] = df
+            except:
+                print("Wasn't able to execute SQL query!")
 
         program_out = f"# AAssistant Code for Cell [{execution_id}]:\n" + program_out
         # program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + sql_query
@@ -367,6 +371,7 @@ Will add more soon.
     )
     @line_cell_magic
     def mimicSQL(self, line, cell=None):
+
         args = parse_argstring(self.chat, line)
 
         if cell is None:
@@ -376,13 +381,15 @@ Will add more soon.
         overall_sys_prompt = """
                      You are a Medical AI Research Assistant, helping a Clinical Researcher do analyses of the MIMIC-III dataset on AWS Athena.
                      If possible, respond to the Clinical Researcher with a SQL query to retrieve their relevant dataset.
-                     If there is no dataset obvious to retrieve from, answer in general from your information and the past conversation.                     
+                     If there is no dataset obvious to retrieve from, answer in general from your information and the past conversation. 
+                     However, never return any past tables you've observed in the conversation.                    
                      """
                 
-        context = get_notebook_ordered_history(current_message)
+        context = get_notebook_ordered_history(current_message, os.getenv('NOTEBOOK_NAME'))
 
         program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt, llm_responses)
         print(program_out)
+        # display(program_out)
 
         execution_id = self.shell.execution_count
 
@@ -390,22 +397,21 @@ Will add more soon.
         sys_prompt = "You are an expert coder. If the text/code sent to you contains a SQL query, respond with only the SQL query found, which is directly executable in Athena. Don't return the query in the form of a triple string. Change things that look like 'mimic.mimiciii.patients' to simply 'patients'. Otherwise respond only 'NO SQL FOUND'."
         contains_SQL = query_llm(program_out, sys_prompt)
         if contains_SQL != "NO SQL FOUND": #If the response has SQL in it, execute it, get df and store it
-            df, sql_query = sql_query_to_athena_df(contains_SQL)
-            display(df.head(5))
-            self.shell.user_ns['df'] = df
-
-            first_two_rows_str = df.head(2).to_string()
-            to_llm_history = program_out + "\n" + "First two rows of the df below:" + "\n" + first_two_rows_str        
-            llm_responses.append(to_llm_history)
+            try:
+                df, sql_query = sql_query_to_athena_df(contains_SQL)
+                if not isinstance(df, pd.DataFrame): # this means the query failed!
+                    failed=True
+                    print("SQL RETRIEVAL FAILED!")
+                else:
+                    display(df.head(5))
+                    self.shell.user_ns['df'] = df
+                    first_two_rows_str = df.head(2).to_string()
+                    to_llm_history = program_out + "\n" + "First two rows of the df below:" + "\n" + first_two_rows_str        
+                    llm_responses.append(to_llm_history)
+            except Exception as e:
+                print("TURBO EXCEPTION", e)
         else:
             llm_responses.append(program_out)
-
-
-
-        program_out = f"# Assistant Code for Cell [{execution_id}]:\n"# + program_out
-        # program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + sql_query
-
-        # self.shell.set_next_input(program_out)
 
 
     @magic_arguments()
@@ -492,14 +498,12 @@ Will add more soon.
                      """
 
 
-
         if cell is None:
             return
         current_message = cell
 
-        context = get_notebook_ordered_history(current_message)
+        context = get_notebook_ordered_history(current_message, os.getenv('NOTEBOOK_NAME'))
         
-
         program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt, llm_responses)
 
         print(program_out)
