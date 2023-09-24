@@ -456,7 +456,7 @@ Will add more soon.
     )
     @line_cell_magic
     def mimicSQL2(self, line, cell=None):
-        args = parse_argstring(self.mimicSQL, line)
+        args = parse_argstring(self.mimicSQL2, line)
 
         if cell is None:
             return
@@ -494,7 +494,7 @@ Will add more soon.
         contains_SQL = query_llm(program_out, sys_prompt)
         if contains_SQL != "NO SQL FOUND": #If the response has SQL in it, create a new code block containing the query, get df and store it
             # Generate JavaScript code to create a new cell below the current cell
-            self.shell.set_next_input(f'%%runSQL\n\n{contains_SQL}')
+            self.shell.set_next_input(f'%%runSQL --notebook_name {args.notebook_name}\n\n{contains_SQL}')
 
         else:
             llm_responses.append(program_out_noSQL)
