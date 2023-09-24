@@ -499,7 +499,8 @@ Will add more soon.
                 answer = context.get('answer')
 
             calculated_answer_string = f"Result : {answer}"
-            print("\n", calculated_answer_string)
+            print("\n")
+            print(calculated_answer_string)
         else:
             # print(program_out)
             calculated_answer_string = ""
