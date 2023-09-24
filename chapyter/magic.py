@@ -390,7 +390,7 @@ Will add more soon.
                      Never return more than one SQL query.
                      If there is no dataset obvious to retrieve from, answer in general from your information and the past conversation.                     
                      """
-        
+        #steve's secret message to emmett 
         #error if notebook name not provided
         if args.notebook_name is None:
             display("Error: Notebook name not provided as an argument in mimicSQL command. Use syntax: %%mimicSQL --notebook_name notebookNameHere.ipynb",)
