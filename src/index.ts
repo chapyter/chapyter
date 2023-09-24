@@ -119,7 +119,7 @@ function isCellChapyterMagicCell(
   strict: boolean = false
 ): boolean {
   let codeCellText = cell.model.sharedModel.getSource();
-  if (codeCellText.startsWith('%chat') || codeCellText.startsWith('%%chat')) {
+  if (codeCellText.startsWith('%chat') || codeCellText.startsWith('%%chat') || codeCellText.startsWith('%%mimicSQL') || codeCellText.startsWith('%%mimicPython')) {
     if (!codeCellText.startsWith('%%chatonly') || !strict) {
       return true;
     }
@@ -127,15 +127,6 @@ function isCellChapyterMagicCell(
   return false;
 }
 
-/**
- * Check if a cell is a Chapyter magic cell in safe mode
- * indicated by the -s or --safe flag
- */
-function isCellChapyterMagicCellSafeMode(cell: CodeCell): boolean {
-  let codeCellText = cell.model.sharedModel.getSource();
-  let firstLine = codeCellText.split('\n')[0];
-  return firstLine.includes('-s') || firstLine.includes('--safe');
-}
 
 /**
  * Delete the cell from the notebook
@@ -204,7 +195,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
               cellType: 'original'
             });
           }
-          let inSafeMode = isCellChapyterMagicCellSafeMode(chatCell);
 
           // because it is successfully executed
           let notebook = tracker.currentWidget;
@@ -220,12 +210,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
                 linkedCellId: chatCell.model.id // the original cell ID
               });
               
-              console.log(inSafeMode)
-              if (!inSafeMode) {
-                selectCellById(notebook.content, assistanceCell.model.id);
-                NotebookActions.run(notebook.content, notebook.sessionContext);
-                assistanceCell.inputHidden = true;
-              }
+              assistanceCell.inputHidden = true;
 
               // The removal of existing linked cells is handled in the executionScheduled event
 
@@ -250,9 +235,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
                */
 
               selectCellById(notebook.content, assistanceCell.model.id);
-              if (!inSafeMode) {
-                NotebookActions.selectBelow(notebook.content);
-              }
 
               // set the proper linked cell ID
               chatCell.model.setMetadata('ChapyterCell', {

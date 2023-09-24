@@ -1,15 +1,49 @@
+#Step 1: %mimic cell magic triggered
+#Step 2: def execute_chat (doesn't do anything interesting, passes on message)
+#Step 3: def execute (doesn't do anything interesting, passes on message)
+#Step 4: guidance_program - this is where we input our custom phrasing
+
 import dataclasses
 import re
 from typing import Any, Callable, Dict, Optional
+import openai
+import nbformat
+import os
+
+
 
 import guidance
 from IPython.core.interactiveshell import InteractiveShell
 
 __all__ = [
     "ChapyterAgentProgram",
-    "_DEFAULT_PROGRAM",
     "_DEFAULT_HISTORY_PROGRAM",
 ]
+
+
+def extract_code_blocks(text):
+    # Regular expression pattern to match code blocks between triple backticks
+    pattern = r"```(.*?)```"
+    
+    # Use re.DOTALL to make sure '.' matches newline characters as well
+    matches = re.findall(pattern, text, re.DOTALL)
+    
+    # Strip any leading or trailing whitespace from each match and return as a list
+    return [match.strip() for match in matches]
+
+
+def query_llm(llm_prompt, sys_prompt):
+    response = openai.ChatCompletion.create(
+        model='gpt-4',
+        messages=[
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": llm_prompt}
+        ],
+        max_tokens=1000,
+        temperature=0.1,
+    )
+    response = response["choices"][0]["message"]["content"]
+    return response
 
 
 @dataclasses.dataclass
@@ -23,71 +57,17 @@ class ChapyterAgentProgram:
         self.pre_call_hooks = self.pre_call_hooks or {}
         self.post_call_hooks = self.post_call_hooks or {}
 
-    def execute(self, message: str, llm: str, shell: InteractiveShell, **kwargs) -> str:
-        model_input_message: Any = message
-        for name, hook in self.pre_call_hooks.items():
-            model_input_message = hook(
-                model_input_message,
-                shell,
-                **kwargs,
-            )
+    #This is step 3, execute
+    def execute(self, message: str, llm: str, shell: InteractiveShell, sys_prompt: str, llm_responses: list, **kwargs) -> str:
 
-        raw_program_response = self.guidance_program(
-            **model_input_message, llm=llm, **kwargs
-        )
-        response = raw_program_response
+        llm_response = query_llm(message, sys_prompt)
 
-        for name, hook in self.post_call_hooks.items():
-            response = hook(
-                response,
-                shell,
-                **kwargs,
-            )
-        return response
+        # print("\n\n")
+        # print(llm_prompt, "\n\n")
+        # print("AI response: ")
+        # print(llm_response)
 
-
-default_coding_guidance_program = guidance(
-    """
-{{#system~}}
-You are a helpful and assistant and you are chatting with an python programmer.
-
-{{~/system}}
-
-{{#user~}}
-From now on, you are ought to generate only the python code based on the description from the programmer.
-{{~/user}}
-
-{{#assistant~}}
-Ok, I will do that. Let's do a practice round.
-{{~/assistant}}
-
-{{#user~}}
-Load the json file called orca.json
-{{~/user}}
-
-{{#assistant~}}
-import json 
-with open('orca.json') as file:
-    data = json.load(file)
-{{~/assistant}}
-
-{{#user~}}
-That was great, now let's do another one.
-{{~/user}}
-
-{{#assistant~}}
-Sounds good.
-{{~/assistant}}
-
-{{#user~}}
-{{current_message}}
-{{~/user}}
-
-{{#assistant~}}
-{{gen 'code' temperature=0 max_tokens=2048}}
-{{~/assistant}}
-"""
-)
+        return llm_response
 
 
 MARKDOWN_CODE_PATTERN = re.compile(r"`{3}([\w]*)\n([\S\s]+?)\n`{3}")
@@ -131,40 +111,131 @@ def clean_response_str(raw_response_str: str):
     return "\n".join(all_converted_str)
 
 
-_DEFAULT_PROGRAM = ChapyterAgentProgram(
-    guidance_program=default_coding_guidance_program,
-    pre_call_hooks={
-        "wrap_to_dict": (lambda x, shell, **kwargs: {"current_message": x})
-    },
-    post_call_hooks={
-        "extract_markdown_code": (
-            lambda raw_response_str, shell, **kwargs: clean_response_str(
-                raw_response_str["code"]
-            )
-        )
-    },
-)
+def clean_execution_history(s):
+    # Remove triple backticks
+    s = s.replace('```', '')
+    
+    # Remove leading and closing newline characters
+    s = s.strip()
+    
+    # Remove the %%mimic --safe -h
+    s = s.replace('%%mimicSQL', '').strip()
+    s = s.replace('%%mimicPython', '').strip()
 
-default_coding_history_guidance_program = guidance(
-    """
-{{#system~}}
-You are a helpful assistant to help with an python programmer.
-{{~/system}}
+    
+    return s
 
-{{#user~}}
-Here is my python code so far:
-{{code_history}}
-{{~/user}}
 
-{{#assistant~}}
-{{gen 'code' temperature=0 max_tokens=2048}}
-{{~/assistant}}
-"""
-)
-# we don't need to add the {{current_instruction}} below {{code_history}}
-# in the template above, because after executing the current chapyter cell,
-# the instruction will be added to the history already.
+import nbformat
 
+import pprint
+
+import pandas as pd
+
+from IPython.core.display import display, HTML
+
+
+def extract_table(outputs):
+    for output in outputs:
+        if 'data' in output and 'text/plain' in output['data']:
+            return output['data']['text/plain']
+    return None
+
+def extract_text(outputs):
+    for output in outputs:
+        if 'text' in output:
+            return output['text']
+    return None
+
+
+def get_notebook_ordered_history(current_message, notebook_name="02-sepsis-gender-age-distribution_detailed.ipynb"):
+
+    #Extract "mimic" Human cells, keep them in order
+    #Extract remaining AI cells, order doesnt matter
+
+    #For each Human cell:
+    #(1) Append Human input
+    #(2) Identify relevant AI cell, append AI code response
+    #(3)Then append Human output
+
+    # Load the current notebook
+    with open(notebook_name, "r", encoding="utf-8") as f:
+        nb = nbformat.read(f, as_version=4)
+
+    top_to_bottom_human_cells_inputs = []
+    top_to_bottom_human_cells_output_tables = []
+    top_to_bottom_human_cells_output_text = []
+
+    # print("CELLS", nb.cells)
+
+    for cell in nb.cells:
+
+        # print("\n\n", cell)
+
+        cell_input = cell["source"]
+        cell_execution_count = cell["execution_count"]
+        if "%%mimic" in cell_input:
+
+            #if in a mimic cell, take the input
+            top_to_bottom_human_cells_inputs.append(cell_input.replace("\n\n", " --- "))
+
+            #break if this is the current cell
+            # print(f"Comparing '{current_message.strip()}' to '{cell_input.strip()}'")
+            if current_message.strip() in cell_input.strip():
+                # print("Breaking!!!")
+                break
+
+            # top_to_bottom_execution_counts.append(cell_execution_count) 
+
+            #if a table is in the outputs, grab it!!!
+            if "outputs" in cell:
+                outputs = cell["outputs"]
+
+                table = extract_table(outputs)
+                text = extract_text(outputs)
+
+                top_to_bottom_human_cells_output_tables.append(table)
+                top_to_bottom_human_cells_output_text.append(text)
+                    
+
+        else:
+            if "Assistant Code" in cell_input:
+                parts = cell_input.split("]:\n")
+                execution_response_no = parts[0].split("[")[-1]
+                code_generated = parts[1]
+                # raw_llm_output_dict[int(execution_response_no)] = code_generated
+
+
+    # print("\n\nGot outputs", top_to_bottom_human_cells_outputs)
+    # print("LENGTHS", len(top_to_bottom_human_cells_inputs), len(top_to_bottom_human_cells_output_text), len(top_to_bottom_human_cells_output_tables))
+    context = "="*60
+    for human_input, AI_text, AI_table in zip(top_to_bottom_human_cells_inputs, top_to_bottom_human_cells_output_text, top_to_bottom_human_cells_output_tables):
+        # print("In loop")
+        context += f"**Clinical Researcher:** {human_input}\n\n"
+        if AI_table != None:
+            context += f"**AI Research Assistant:** {AI_text}\n{AI_table}\n\n"
+        else:
+            context += f"**AI Research Assistant:** {AI_text}\n\n"
+        context += "="*60
+        context += "\n\n"
+
+    # print(top_to_bottom_human_cells_inputs)
+    # print(top_to_bottom_human_cells_outputs)
+    # print([raw_llm_output_dict[i] for i in top_to_bottom_execution_counts])
+
+    context += f"**Clinical Researcher:** {top_to_bottom_human_cells_inputs[-1]}\n\n"
+    context += f"**AI Research Assistant:**"
+
+
+
+
+    from IPython.display import display, Markdown
+
+    # print("Seeing pre-prompt")
+    # display(Markdown(context))
+    # print(context)
+
+    return context
 
 def get_execution_history(ipython, get_output=True, width=4):
     def limit_output(output, limit=100):
@@ -202,22 +273,29 @@ def get_execution_history(ipython, get_output=True, width=4):
             history_str += "\nOutput:\n" + limit_output(output.strip())
 
         history_strs.append(history_str + "\n")
-    return "\n".join(history_strs)
+
+    history_strs = [clean_execution_history(s) for s in history_strs]
+
+    return history_strs
 
 
-def clean_response_str_in_interpreter(raw_response_str):
-    raw_response_str = raw_response_str.strip()
-    # Remove the leading ">>>"
-    raw_response_str = raw_response_str.lstrip(">>> ")
-    # Split the string into lines
-    lines = raw_response_str.split("\n... ")
-    # Join the lines back together with newline characters
-    raw_response_str = "\n".join(lines)
-    # If the string ends with "...", remove it
-    if raw_response_str.endswith("..."):
-        raw_response_str = raw_response_str[:-3]
+default_coding_history_guidance_program = guidance(
+    """
+{{#system~}}
+You are a helpful and assistant and you are chatting with an programmer interested in retrieving data from the MIMIC-III SQL database on AWS Athena.
+If they ask for something that is answerable with a SQL query, make sure there is only one SELECT statement.
+{{~/system}}
 
-    return raw_response_str.strip()
+{{#user~}}
+Here is my code so far:
+{{llm_conversation}}
+{{~/user}}
+
+{{#assistant~}}
+{{gen 'code' temperature=0 max_tokens=2048}}
+{{~/assistant}}
+"""
+)
 
 
 _DEFAULT_HISTORY_PROGRAM = ChapyterAgentProgram(
@@ -225,7 +303,7 @@ _DEFAULT_HISTORY_PROGRAM = ChapyterAgentProgram(
     pre_call_hooks={
         "add_execution_history": (
             lambda raw_message, shell, **kwargs: {
-                "code_history": get_execution_history(shell),
+                "llm_conversation": get_execution_history(shell),
             }
         )
     },
@@ -236,30 +314,4 @@ _DEFAULT_HISTORY_PROGRAM = ChapyterAgentProgram(
             )
         )
     },
-)
-
-
-default_chatonly_guidance_program = guidance(
-    """
-{{#system~}}
-You are a helpful assistant that helps people find information.
-{{~/system}}
-
-{{#user~}}
-{{current_message}}
-{{~/user}}
-
-{{#assistant~}}
-{{gen "response" max_tokens=1024}}
-{{~/assistant}}
-"""
-)
-
-
-_DEFAULT_CHATONLY_PROGRAM = ChapyterAgentProgram(
-    guidance_program=default_chatonly_guidance_program,
-    pre_call_hooks={
-        "wrap_to_dict": (lambda x, shell, **kwargs: {"current_message": x})
-    },
-    post_call_hooks={"extract_response": (lambda x, shell, **kwargs: x["response"])},
 )
