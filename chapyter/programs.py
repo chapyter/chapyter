@@ -8,6 +8,7 @@ import re
 from typing import Any, Callable, Dict, Optional
 import openai
 import nbformat
+import os
 
 
 
@@ -20,6 +21,7 @@ __all__ = [
 ]
 
 
+#tiny comment
 def extract_code_blocks(text):
     # Regular expression pattern to match code blocks between triple backticks
     pattern = r"```(.*?)```"
@@ -147,8 +149,6 @@ def extract_text(outputs):
     return None
 
 
-#def get_notebook_ordered_history(current_message, notebook_name="01-sepsis-gender-distribution.ipynb"):
-#def get_notebook_ordered_history(current_message, notebook_name="01-sepsis-gender-distribution.ipynb"):
 def get_notebook_ordered_history(current_message, notebook_name):
 
     #Extract "mimic" Human cells, keep them in order
@@ -160,6 +160,8 @@ def get_notebook_ordered_history(current_message, notebook_name):
     #(3)Then append Human output
 
     # Load the current notebook
+    notebook_name = os.getenv("NOTEBOOK_NAME")
+
     with open(notebook_name, "r", encoding="utf-8") as f:
         nb = nbformat.read(f, as_version=4)
 
@@ -210,6 +212,7 @@ def get_notebook_ordered_history(current_message, notebook_name):
     # print("\n\nGot outputs", top_to_bottom_human_cells_outputs)
     # print("LENGTHS", len(top_to_bottom_human_cells_inputs), len(top_to_bottom_human_cells_output_text), len(top_to_bottom_human_cells_output_tables))
     context = "="*60
+    context += "\n"
     for human_input, AI_text, AI_table in zip(top_to_bottom_human_cells_inputs, top_to_bottom_human_cells_output_text, top_to_bottom_human_cells_output_tables):
         # print("In loop")
         context += f"**Clinical Researcher:** {human_input}\n\n"
