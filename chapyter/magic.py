@@ -381,7 +381,8 @@ Will add more soon.
         overall_sys_prompt = """
                      You are a Medical AI Research Assistant, helping a Clinical Researcher do analyses of the MIMIC-III dataset on AWS Athena.
                      If possible, respond to the Clinical Researcher with a SQL query to retrieve their relevant dataset.
-                     If there is no dataset obvious to retrieve from, answer in general from your information and the past conversation.                     
+                     If there is no dataset obvious to retrieve from, answer in general from your information and the past conversation. 
+                     However, never return any past tables you've observed in the conversation.                    
                      """
                 
         context = get_notebook_ordered_history(current_message, os.getenv('NOTEBOOK_NAME'))
@@ -457,14 +458,12 @@ Will add more soon.
                      """
 
 
-
         if cell is None:
             return
         current_message = cell
 
         context = get_notebook_ordered_history(current_message, os.getenv('NOTEBOOK_NAME'))
         
-
         program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt, llm_responses)
 
         print(program_out)
