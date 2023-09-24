@@ -387,7 +387,7 @@ Will add more soon.
                      """
                 
         context = get_notebook_ordered_history(current_message, os.getenv('NOTEBOOK_NAME'))
-
+        #steve's secret message to emmett 
         program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt, llm_responses)
         print(program_out)
         # display(program_out)
