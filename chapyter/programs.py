@@ -122,6 +122,7 @@ def clean_execution_history(s):
     # Remove the %%mimic --safe -h
     s = s.replace('%%mimicSQL', '').strip()
     s = s.replace('%%mimicPython', '').strip()
+    s = s.replace('%%mimicPython2', '').strip()
 
     
     return s
@@ -177,23 +178,20 @@ def get_notebook_ordered_history(current_message, notebook_name):
             # print("\n\n", cell)
 
             cell_input = cell["source"]
-            cell_execution_count = cell["execution_count"]
-            
-            if "%%mimic" in cell_input:
 
+            if "reload" not in cell_input and "dotenv" not in cell_input and "os.environ" not in cell_input:
+                
                 #if in a mimic cell, take the input
                 top_to_bottom_human_cells_inputs.append(cell_input.replace("\n\n", " --- "))
 
-                #break if this is the current cell
-                # print(f"Comparing '{current_message.strip()}' to '{cell_input.strip()}'")
+                #break if this is the current cell - this ensures history ends at the cell we're executing
+                #TODO: if you have multiple cells with the same command, this can be an issue
                 if current_message.strip() in cell_input.strip():
-                    # print("Breaking!!!")
                     break
-
-                # top_to_bottom_execution_counts.append(cell_execution_count) 
 
                 #if a table is in the outputs, grab it!!!
                 if "outputs" in cell:
+
                     outputs = cell["outputs"]
 
                     table = extract_table(outputs)
@@ -201,17 +199,7 @@ def get_notebook_ordered_history(current_message, notebook_name):
 
                     top_to_bottom_human_cells_output_tables.append(table)
                     top_to_bottom_human_cells_output_text.append(text)
-                        
-            else:
-                if "Assistant Code" in cell_input:
-                    parts = cell_input.split("]:\n")
-                    execution_response_no = parts[0].split("[")[-1]
-                    code_generated = parts[1]
-                    # raw_llm_output_dict[int(execution_response_no)] = code_generated
 
-
-    # print("\n\nGot outputs", top_to_bottom_human_cells_outputs)
-    # print("LENGTHS", len(top_to_bottom_human_cells_inputs), len(top_to_bottom_human_cells_output_text), len(top_to_bottom_human_cells_output_tables))
     context = "="*60
     context += "\n"
     for human_input, AI_text, AI_table in zip(top_to_bottom_human_cells_inputs, top_to_bottom_human_cells_output_text, top_to_bottom_human_cells_output_tables):

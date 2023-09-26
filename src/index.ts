@@ -119,7 +119,7 @@ function isCellChapyterMagicCell(
   strict: boolean = false
 ): boolean {
   let codeCellText = cell.model.sharedModel.getSource();
-  if (codeCellText.startsWith('%chat') || codeCellText.startsWith('%%chat') || codeCellText.startsWith('%%mimicSQL') || codeCellText.startsWith('%%mimicPython') || codeCellText.startsWith('%%runSQL')) {
+  if (codeCellText.startsWith('%chat') || codeCellText.startsWith('%%chat') || codeCellText.startsWith('%%mimicSQL') || codeCellText.startsWith('%%mimicPython2') || codeCellText.startsWith('%%mimicPython') || codeCellText.startsWith('%%runSQL')) {
     if (!codeCellText.startsWith('%%chatonly') || !strict) {
       return true;
     }
