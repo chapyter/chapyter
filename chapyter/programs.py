@@ -172,41 +172,42 @@ def get_notebook_ordered_history(current_message, notebook_name):
     # print("CELLS", nb.cells)
 
     for cell in nb.cells:
+        
+        if cell["cell_type"] == "code":
+            # print("\n\n", cell)
 
-        # print("\n\n", cell)
+            cell_input = cell["source"]
+            cell_execution_count = cell["execution_count"]
+            
+            if "%%mimic" in cell_input:
 
-        cell_input = cell["source"]
-        cell_execution_count = cell["execution_count"]
-        if "%%mimic" in cell_input:
+                #if in a mimic cell, take the input
+                top_to_bottom_human_cells_inputs.append(cell_input.replace("\n\n", " --- "))
 
-            #if in a mimic cell, take the input
-            top_to_bottom_human_cells_inputs.append(cell_input.replace("\n\n", " --- "))
+                #break if this is the current cell
+                # print(f"Comparing '{current_message.strip()}' to '{cell_input.strip()}'")
+                if current_message.strip() in cell_input.strip():
+                    # print("Breaking!!!")
+                    break
 
-            #break if this is the current cell
-            # print(f"Comparing '{current_message.strip()}' to '{cell_input.strip()}'")
-            if current_message.strip() in cell_input.strip():
-                # print("Breaking!!!")
-                break
+                # top_to_bottom_execution_counts.append(cell_execution_count) 
 
-            # top_to_bottom_execution_counts.append(cell_execution_count) 
+                #if a table is in the outputs, grab it!!!
+                if "outputs" in cell:
+                    outputs = cell["outputs"]
 
-            #if a table is in the outputs, grab it!!!
-            if "outputs" in cell:
-                outputs = cell["outputs"]
+                    table = extract_table(outputs)
+                    text = extract_text(outputs)
 
-                table = extract_table(outputs)
-                text = extract_text(outputs)
-
-                top_to_bottom_human_cells_output_tables.append(table)
-                top_to_bottom_human_cells_output_text.append(text)
-                    
-
-        else:
-            if "Assistant Code" in cell_input:
-                parts = cell_input.split("]:\n")
-                execution_response_no = parts[0].split("[")[-1]
-                code_generated = parts[1]
-                # raw_llm_output_dict[int(execution_response_no)] = code_generated
+                    top_to_bottom_human_cells_output_tables.append(table)
+                    top_to_bottom_human_cells_output_text.append(text)
+                        
+            else:
+                if "Assistant Code" in cell_input:
+                    parts = cell_input.split("]:\n")
+                    execution_response_no = parts[0].split("[")[-1]
+                    code_generated = parts[1]
+                    # raw_llm_output_dict[int(execution_response_no)] = code_generated
 
 
     # print("\n\nGot outputs", top_to_bottom_human_cells_outputs)
