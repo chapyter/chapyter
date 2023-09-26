@@ -484,6 +484,9 @@ Will add more soon.
         program_out_noSQL_list.pop(1)
         program_out_noSQL = "".join(program_out_noSQL_list)
 
+        # Replace multiple consecutive newlines with a single newline
+        program_out_noSQL = re.sub(r'\n+', '\n\n', program_out_noSQL)
+
         #print the response to jupyter notebook
         print(program_out_noSQL)
 
