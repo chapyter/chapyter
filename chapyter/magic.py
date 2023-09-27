@@ -380,10 +380,11 @@ Will add more soon.
 
         overall_sys_prompt = """
                      You are a Medical AI Research Assistant, helping a Clinical Researcher do analyses of the MIMIC-III dataset on AWS Athena.
+                     Use syntax that will work for AWS Athena - i.e. use date_diff if you need to calculate an age.
                      If possible, respond to the Clinical Researcher with a SQL query to retrieve their relevant dataset.
                      If there is no dataset obvious to retrieve from, answer in general from your information and the past conversation. 
                      Never return more than one SQL query.
-                     However, never return any past tables you've observed in the conversation.                    
+                     Never return any past tables you've observed in the conversation.                    
                      """
                 
         context = get_notebook_ordered_history(current_message, os.getenv('NOTEBOOK_NAME'))
@@ -465,6 +466,7 @@ Will add more soon.
                      If possible, respond to the Clinical Researcher with a SQL query to retrieve their relevant dataset. Use best guess ICD-9 codes, don't include decimals.
                      Instead of tables like 'mimic.mimiciii.patients' simply use 'patients'.
                      Never return more than one SQL query.
+                     Dont use the following commands, because they won't work on AWS Athena: GROUP_CONCAT, string_agg
                      If there is no dataset obvious to retrieve from, answer in general from your information and the past conversation.  
                      Return all SQL queries between two sets of triple ticks.                   
                      """
