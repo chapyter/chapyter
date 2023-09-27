@@ -323,7 +323,7 @@ Will add more soon.
         contains_SQL = query_llm(program_out, sys_prompt)
         if contains_SQL != "NO SQL FOUND": #If the response has SQL in it, execute it, get df and store it
             try:
-                print("EXECUTING SQL")
+                # print("EXECUTING SQL")
                 df, sql_query = sql_query_to_athena_df(contains_SQL)
                 display(df.head(5))
                 self.shell.user_ns['df'] = df
@@ -370,7 +370,7 @@ Will add more soon.
         help="Whether to set slient=True for guidance calls.",
     )
     @line_cell_magic
-    def mimicSQL(self, line, cell=None):
+    def mimicSQLOG(self, line, cell=None):
 
         args = parse_argstring(self.chat, line)
 
@@ -389,8 +389,6 @@ Will add more soon.
         context = get_notebook_ordered_history(current_message, os.getenv('NOTEBOOK_NAME'))
         #steve's secret message to emmett 
         program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt, llm_responses)
-        print(program_out)
-        # display(program_out)
 
         execution_id = self.shell.execution_count
 
@@ -455,8 +453,8 @@ Will add more soon.
     help="The name of the notebook."
     )
     @line_cell_magic
-    def mimicSQL2(self, line, cell=None):
-        args = parse_argstring(self.mimicSQL2, line)
+    def mimicSQL(self, line, cell=None):
+        args = parse_argstring(self.mimicSQL, line)
 
         if cell is None:
             return
@@ -464,9 +462,11 @@ Will add more soon.
 
         overall_sys_prompt = """
                      You are a Medical AI Research Assistant, helping a Clinical Researcher do analyses of the MIMIC-III dataset on AWS Athena.
-                     If possible, respond to the Clinical Researcher with a SQL query to retrieve their relevant dataset. 
+                     If possible, respond to the Clinical Researcher with a SQL query to retrieve their relevant dataset. Use best guess ICD-9 codes, don't include decimals.
+                     Instead of tables like 'mimic.mimiciii.patients' simply use 'patients'.
                      Never return more than one SQL query.
-                     If there is no dataset obvious to retrieve from, answer in general from your information and the past conversation.                     
+                     If there is no dataset obvious to retrieve from, answer in general from your information and the past conversation.  
+                     Return all SQL queries between two sets of triple ticks.                   
                      """
         
         #error if notebook name not provided
@@ -479,34 +479,26 @@ Will add more soon.
         program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt, llm_responses)
 
         #regex to get rid of SQL in the response
-        #sql_pattern = r'```sql\n(.*?)\n```'
         program_out_noSQL_list = program_out.split("```")
-        program_out_noSQL_list.pop(1)
+        program_out_noSQL_list = [s for s in program_out_noSQL_list if not s.startswith("sql")]
+        
+        #this contains all the non-SQL text
         program_out_noSQL = "".join(program_out_noSQL_list)
-
-        # Replace multiple consecutive newlines with a single newline
         program_out_noSQL = re.sub(r'\n+', '\n\n', program_out_noSQL)
+        print(program_out_noSQL) #actually print it so that its in the history
 
-        #print the response to jupyter notebook
-        print(program_out_noSQL)
+        #take the element in the list that has SQL code
+        #also remove the 'sql' that it starts with
+        sql_query = [s for s in program_out.split("```") if s.startswith("sql")]
+        sql_query = [s[3:] if s.startswith("sql") else s for s in sql_query]
 
-        execution_id = self.shell.execution_count
 
-        #Emmett for executing SQl code
-        sys_prompt = "You are an expert coder. If the text/code sent to you contains a SQL query, respond with only the SQL query found, which is directly executable in Athena. Don't return the query in the form of a triple string. Change things that look like 'mimic.mimiciii.patients' to simply 'patients'. Otherwise respond only 'NO SQL FOUND'."
-        contains_SQL = query_llm(program_out, sys_prompt)
-        if contains_SQL != "NO SQL FOUND": #If the response has SQL in it, create a new code block containing the query, get df and store it
-            # Generate JavaScript code to create a new cell below the current cell
-            self.shell.set_next_input(f'%%runSQL --notebook_name {args.notebook_name}\n\n{contains_SQL}')
+
+        if len(sql_query) > 0:
+            self.shell.set_next_input(f'%%runSQL --notebook_name {args.notebook_name}\n\n{sql_query[0]}')
 
         else:
             llm_responses.append(program_out_noSQL)
-
-
-        program_out = f"# Assistant Code for Cell [{execution_id}]:\n"# + program_out
-        # program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + sql_query
-
-
 
 
 
@@ -583,14 +575,14 @@ Will add more soon.
         help="Whether to set slient=True for guidance calls.",
     )
     @line_cell_magic
-    def mimicPython(self, line, cell=None):
+    def mimicPythonOG(self, line, cell=None):
         args = parse_argstring(self.chat, line)
 
         overall_sys_prompt = """
                      You are a Medical AI Research Assistant, helping a Clinical Researcher do analysis on their dataframe.
-                     If possible, respond to the Clinical Researcher with python code to help them perform their analysis. Assume the past dataset is in a dataframe called 'df'.
+                     If the conversation doesn't require python code at this moment, and you can answer based on conversation history, simply respond based on the past conversation and your knowledge of the dataset.                     
+                     If needed, respond to the Clinical Researcher with python code to help them perform their analysis. If needed, assume the past dataset is in a dataframe called 'df'.
                      Don't assume anything about the datatypes in the df, because most of them are likely strings. Convert or check datatypes as needed to make a robust analysis.
-                     If the conversation doesn't require python code at this moment, simply respond based on the past conversation and your knowledge of the dataset.                     
                      """
 
 
@@ -646,6 +638,79 @@ Will add more soon.
         program_out = f"# Assistant Code for Cell [{execution_id}]:\n" #+ program_out + "\n" + calculated_answer_string + "\n"
         # self.shell.set_next_input(program_out)
 
+
+
+    @magic_arguments()
+    @argument(
+        "--model",
+        "-m",
+        type=str,
+        default=None,
+        help="The model to be used for the chat interface.",
+    )
+    @argument(
+        "--history",
+        "-h",
+        action="store_true",
+        help="Whether to use history for the code.",
+    )
+    @argument(
+        "--program",
+        "-p",
+        type=Any,
+        default=None,
+        help="The program to be used for the chat interface.",
+    )
+    @argument(
+        "--safe",
+        "-s",
+        action="store_true",
+        help="Activate safe Mode that the code won't be automatically executed.",
+    )
+    @argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Whether to set slient=True for guidance calls.",
+    )
+    @line_cell_magic
+    def mimicPython(self, line, cell=None):
+
+        args = parse_argstring(self.mimicPython, line)
+
+        overall_sys_prompt = """
+                     You are a Medical AI Research Assistant, helping a Clinical Researcher do analysis on their dataframe.
+                     If possible, respond to the Clinical Researcher with python code to help them perform their analysis. Assume the past dataset is in a dataframe called 'df'.
+                     Don't assume anything about the datatypes in the df, because most of them are likely strings. Convert or check datatypes as needed to make a robust analysis.
+                     Any python code should end in a print statement showing the result.
+                     If the conversation doesn't require python code at this moment, simply respond based on the past conversation and your knowledge of the dataset.     
+                     All python code should be returned between two sets of triple ticks.                
+                     """
+
+
+        if cell is None:
+            return
+        current_message = cell
+
+        context = get_notebook_ordered_history(current_message, os.getenv('NOTEBOOK_NAME'))
+        
+        program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt, llm_responses)
+        #regex to get rid of Python in the response
+        #sql_pattern = r'```sql\n(.*?)\n```'
+        # print("GOT RAW PROGRAM", program_out)
+        program_out_noPython_list = program_out.split("```")
+        program_out_noPython_list = [s for s in program_out_noPython_list if not s.startswith("python")]
+        program_out_noPython = "".join(program_out_noPython_list)
+        program_out_noPython = re.sub(r'\n+', '\n\n', program_out_noPython)
+        print(program_out_noPython)
+
+
+        #find the element with python code
+        python_code = [s for s in program_out.split("```") if s.startswith("python")]
+        python_code = [s[6:] if s.startswith("python") else s for s in python_code]
+
+        if len(python_code) > 0:
+            self.shell.set_next_input(f'##AI-generated-code\n\n{python_code[0]}')
 
     @magic_arguments()
     @argument(
