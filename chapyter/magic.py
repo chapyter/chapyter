@@ -4,13 +4,14 @@ import os
 import re
 from typing import Any, Optional, Union  # noqa
 import pandas as pd
+import matplotlib.pyplot as plt
 
 from IPython.display import display, Javascript
 
 
 import sys
 from langchain.chat_models import ChatOpenAI
-from .LLMimic_app import query_llm, sql_query_to_athena_df
+from .athena_utils import query_llm, sql_query_to_athena_df
 from .programs import get_notebook_ordered_history
 
 DATABASE = 'mimiciii'
@@ -447,12 +448,12 @@ Will add more soon.
         action="store_true",
         help="Whether to set slient=True for guidance calls.",
     )
-    @argument(
-    "--notebook_name",  # Add this line for the new argument
-    type=str,           # Specify the argument type (str in this case)
-    default=None,       # Provide a default value if desired
-    help="The name of the notebook."
-    )
+    # @argument(
+    # "--notebook_name",  # Add this line for the new argument
+    # type=str,           # Specify the argument type (str in this case)
+    # default=None,       # Provide a default value if desired
+    # help="The name of the notebook."
+    # )
     @line_cell_magic
     def mimicSQL(self, line, cell=None):
         args = parse_argstring(self.mimicSQL, line)
@@ -463,20 +464,25 @@ Will add more soon.
 
         overall_sys_prompt = """
                      You are a Medical AI Research Assistant, helping a Clinical Researcher do analyses of the MIMIC-III dataset on AWS Athena.
-                     If possible, respond to the Clinical Researcher with a SQL query to retrieve their relevant dataset. Use best guess ICD-9 codes, don't include decimals.
+
+                     Use best guess ICD-9 codes, don't include decimals.
                      Instead of tables like 'mimic.mimiciii.patients' simply use 'patients'.
                      Never return more than one SQL query.
-                     Dont use the following commands, because they won't work on AWS Athena: GROUP_CONCAT, string_agg
+                     Dont use the following commands, because they won't work on AWS Athena: GROUP_CONCAT, string_agg, AGE, date_part
+                     For date calculation, use Athena command DATE_DIFF.
+                     When crafting the SQL query, think step-by-step - don't retrieve columns that are not present in the table!
+                                          
                      If there is no dataset obvious to retrieve from, answer in general from your information and the past conversation.  
+
                      Return all SQL queries between two sets of triple ticks.                   
                      """
         
         #error if notebook name not provided
-        if args.notebook_name is None:
-            display("Error: Notebook name not provided as an argument in mimicSQL command. Use syntax: %%mimicSQL --notebook_name notebookNameHere.ipynb",)
-            return
+        # if args.notebook_name is None:
+        #     display("Error: Notebook name not provided as an argument in mimicSQL command. Use syntax: %%mimicSQL --notebook_name notebookNameHere.ipynb",)
+        #     return
         
-        context = get_notebook_ordered_history(current_message, args.notebook_name)
+        context = get_notebook_ordered_history(current_message, os.getenv('NOTEBOOK_NAME'))
 
         program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt, llm_responses)
 
@@ -497,7 +503,8 @@ Will add more soon.
 
 
         if len(sql_query) > 0:
-            self.shell.set_next_input(f'%%runSQL --notebook_name {args.notebook_name}\n\n{sql_query[0]}')
+            # self.shell.set_next_input(f'%%runSQL --notebook_name {args.notebook_name}\n\n{sql_query[0]}')
+            self.shell.set_next_input(f'%%runSQL \n\n{sql_query[0]}')
 
         else:
             llm_responses.append(program_out_noSQL)
@@ -608,7 +615,7 @@ Will add more soon.
         """
 
         contains_python = query_llm(program_out, sys_prompt)
-        if contains_python != "NO PYTHON CODE FOUND": # and isinstance(st.session_state.df, pd.DataFrame):
+        if contains_python != "NO PYTHON CODE FOUND": 
 
             #Now that we got the code, lets analyze our df, need to retrieve from session state dict            
             #And then we will execute the code on the fly
@@ -682,10 +689,14 @@ Will add more soon.
 
         overall_sys_prompt = """
                      You are a Medical AI Research Assistant, helping a Clinical Researcher do analysis on their dataframe.
+
                      If possible, respond to the Clinical Researcher with python code to help them perform their analysis. Assume the past dataset is in a dataframe called 'df'.
                      Don't assume anything about the datatypes in the df, because most of them are likely strings. Convert or check datatypes as needed to make a robust analysis.
                      Any python code should end in a print statement showing the result.
                      If the conversation doesn't require python code at this moment, simply respond based on the past conversation and your knowledge of the dataset.     
+
+                     Include ALL modules used.
+
                      All python code should be returned between two sets of triple ticks.                
                      """
 
@@ -747,12 +758,12 @@ Will add more soon.
         action="store_true",
         help="Whether to set slient=True for guidance calls.",
     )
-    @argument(
-    "--notebook_name",  # Add this line for the new argument
-    type=str,           # Specify the argument type (str in this case)
-    default=None,       # Provide a default value if desired
-    help="The name of the notebook."
-    )
+    # @argument(
+    # "--notebook_name",  # Add this line for the new argument
+    # type=str,           # Specify the argument type (str in this case)
+    # default=None,       # Provide a default value if desired
+    # help="The name of the notebook."
+    # )
     @line_cell_magic
     def runSQL(self, line, cell=None):
         args = parse_argstring(self.runSQL, line)
@@ -762,9 +773,9 @@ Will add more soon.
         current_message = cell
         
         #error if notebook name not provided
-        if args.notebook_name is None:
-            display("Error: Notebook name not provided as an argument in mimicSQL command. Use syntax: %%mimicSQL --notebook_name notebookNameHere.ipynb",)
-            return
+        # if args.notebook_name is None:
+        #     display("Error: Notebook name not provided as an argument in mimicSQL command. Use syntax: %%mimicSQL --notebook_name notebookNameHere.ipynb",)
+        #     return
 
         execution_id = self.shell.execution_count
 

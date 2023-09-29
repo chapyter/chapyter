@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, Optional
 import openai
 import nbformat
 import os
+import matplotlib.pyplot as plt
 
 
 
