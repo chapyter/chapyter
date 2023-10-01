@@ -2,11 +2,10 @@ import argparse
 import logging
 import os
 import re
-from typing import Any, Optional, Union  # noqa
-import pandas as pd
-import matplotlib.pyplot as plt
+from typing import Any
 
 from IPython.display import display, Javascript
+import tiktoken
 
 
 import sys
@@ -29,6 +28,8 @@ from IPython.core.magic import (  # type: ignore
     line_cell_magic,
     line_magic,
     magics_class,
+    register_line_cell_magic
+
 )
 from IPython.core.magic_arguments import (  # type: ignore
     argument,
@@ -42,8 +43,6 @@ from .programs import (
     _DEFAULT_HISTORY_PROGRAM,
     ChapyterAgentProgram,
 )
-
-llm_responses = []
 
 logger = logging.getLogger(__name__)
 
@@ -256,7 +255,6 @@ Will add more soon.
         args: argparse.Namespace,
         shell: InteractiveShell,
         sys_prompt: str,
-        llm_responses: list,
         **kwargs,
     ):
         
@@ -268,74 +266,11 @@ Will add more soon.
             message=message,
             llm=llm,
             shell=shell,
-            silent=not args.verbose,
             sys_prompt=sys_prompt,
-            llm_responses=llm_responses,
             **kwargs,
         )
         return response
 
-    @magic_arguments()
-    @argument(
-        "--model",
-        "-m",
-        type=str,
-        default=None,
-        help="The model to be used for the chat interface.",
-    )
-    @argument(
-        "--history",
-        "-h",
-        action="store_true",
-        help="Whether to use history for the code.",
-    )
-    @argument(
-        "--program",
-        "-p",
-        type=Any,
-        default=None,
-        help="The program to be used for the chat interface.",
-    )
-    @argument(
-        "--safe",
-        "-s",
-        action="store_true",
-        help="Activate safe Mode that the code won't be automatically executed.",
-    )
-    @argument(
-        "--verbose",
-        "-v",
-        action="store_true",
-        help="Whether to set slient=True for guidance calls.",
-    )
-    @line_cell_magic
-    def chat(self, line, cell=None):
-        args = parse_argstring(self.chat, line)
-
-        if cell is None:
-            return
-        current_message = cell
-
-        program_out = self.execute_chat(current_message, args, self.shell)
-        execution_id = self.shell.execution_count
-
-        #Emmett for executing SQl code
-        sys_prompt = "You are an expert coder. If the text/code sent to you contains a SQL query, respond with only the SQL query found, which is directly executable in Athena. Don't return the query in the form of a triple string. Change things that look like 'mimic.mimiciii.patients' to simply 'patients'. Otherwise respond only 'NO SQL FOUND'."
-        contains_SQL = query_llm(program_out, sys_prompt)
-        if contains_SQL != "NO SQL FOUND": #If the response has SQL in it, execute it, get df and store it
-            try:
-                # print("EXECUTING SQL")
-                df, sql_query = sql_query_to_athena_df(contains_SQL)
-                display(df.head(5))
-                self.shell.user_ns['df'] = df
-            except:
-                print("Wasn't able to execute SQL query!")
-
-        program_out = f"# AAssistant Code for Cell [{execution_id}]:\n" + program_out
-        # program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + sql_query
-
-        # self.shell.set_next_input(program_out)
-
 
     @magic_arguments()
     @argument(
@@ -370,90 +305,6 @@ Will add more soon.
         action="store_true",
         help="Whether to set slient=True for guidance calls.",
     )
-    @line_cell_magic
-    def mimicSQLOG(self, line, cell=None):
-
-        args = parse_argstring(self.chat, line)
-
-        if cell is None:
-            return
-        current_message = cell
-
-        overall_sys_prompt = """
-                     You are a Medical AI Research Assistant, helping a Clinical Researcher do analyses of the MIMIC-III dataset on AWS Athena.
-                     Use syntax that will work for AWS Athena - i.e. use date_diff if you need to calculate an age.
-                     If possible, respond to the Clinical Researcher with a SQL query to retrieve their relevant dataset.
-                     If there is no dataset obvious to retrieve from, answer in general from your information and the past conversation. 
-                     Never return more than one SQL query.
-                     Never return any past tables you've observed in the conversation.                    
-                     """
-                
-        context = get_notebook_ordered_history(current_message, os.getenv('NOTEBOOK_NAME'))
-        #steve's secret message to emmett 
-        program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt, llm_responses)
-
-        execution_id = self.shell.execution_count
-
-        #Emmett for executing SQl code
-        sys_prompt = "You are an expert coder. If the text/code sent to you contains a SQL query, respond with only the SQL query found, which is directly executable in Athena. Don't return the query in the form of a triple string. Change things that look like 'mimic.mimiciii.patients' to simply 'patients'. Otherwise respond only 'NO SQL FOUND'."
-        contains_SQL = query_llm(program_out, sys_prompt)
-        if contains_SQL != "NO SQL FOUND": #If the response has SQL in it, execute it, get df and store it
-            try:
-                df, sql_query = sql_query_to_athena_df(contains_SQL)
-                if not isinstance(df, pd.DataFrame): # this means the query failed!
-                    failed=True
-                    print("SQL RETRIEVAL FAILED!")
-                else:
-                    display(df.head(5))
-                    self.shell.user_ns['df'] = df
-                    first_two_rows_str = df.head(2).to_string()
-                    to_llm_history = program_out + "\n" + "First two rows of the df below:" + "\n" + first_two_rows_str        
-                    llm_responses.append(to_llm_history)
-            except Exception as e:
-                print("TURBO EXCEPTION", e)
-        else:
-            llm_responses.append(program_out_noSQL)
-
-
-    @magic_arguments()
-    @argument(
-        "--model",
-        "-m",
-        type=str,
-        default=None,
-        help="The model to be used for the chat interface.",
-    )
-    @argument(
-        "--history",
-        "-h",
-        action="store_true",
-        help="Whether to use history for the code.",
-    )
-    @argument(
-        "--program",
-        "-p",
-        type=Any,
-        default=None,
-        help="The program to be used for the chat interface.",
-    )
-    @argument(
-        "--safe",
-        "-s",
-        action="store_true",
-        help="Activate safe Mode that the code won't be automatically executed.",
-    )
-    @argument(
-        "--verbose",
-        "-v",
-        action="store_true",
-        help="Whether to set slient=True for guidance calls.",
-    )
-    # @argument(
-    # "--notebook_name",  # Add this line for the new argument
-    # type=str,           # Specify the argument type (str in this case)
-    # default=None,       # Provide a default value if desired
-    # help="The name of the notebook."
-    # )
     @line_cell_magic
     def mimicSQL(self, line, cell=None):
         args = parse_argstring(self.mimicSQL, line)
@@ -470,21 +321,19 @@ Will add more soon.
                      Never return more than one SQL query.
                      Dont use the following commands, because they won't work on AWS Athena: GROUP_CONCAT, string_agg, AGE, date_part
                      For date calculation, use Athena command DATE_DIFF.
+                     When relevant, guess itemids rather than searching for them!
+                     
+
                      When crafting the SQL query, think step-by-step - don't retrieve columns that are not present in the table!
                                           
                      If there is no dataset obvious to retrieve from, answer in general from your information and the past conversation.  
 
                      Return all SQL queries between two sets of triple ticks.                   
                      """
-        
-        #error if notebook name not provided
-        # if args.notebook_name is None:
-        #     display("Error: Notebook name not provided as an argument in mimicSQL command. Use syntax: %%mimicSQL --notebook_name notebookNameHere.ipynb",)
-        #     return
-        
+                
         context = get_notebook_ordered_history(current_message, os.getenv('NOTEBOOK_NAME'))
 
-        program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt, llm_responses)
+        program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt)
 
         #regex to get rid of SQL in the response
         program_out_noSQL_list = program_out.split("```")
@@ -503,11 +352,7 @@ Will add more soon.
 
 
         if len(sql_query) > 0:
-            # self.shell.set_next_input(f'%%runSQL --notebook_name {args.notebook_name}\n\n{sql_query[0]}')
             self.shell.set_next_input(f'%%runSQL \n\n{sql_query[0]}')
-
-        else:
-            llm_responses.append(program_out_noSQL)
 
 
 
@@ -546,106 +391,19 @@ Will add more soon.
     )
     @line_cell_magic
     def mimicRevealChatHistory(self, line, cell=None):
-        context = get_notebook_ordered_history(current_message=None)
-        print(context)
-
-
-    @magic_arguments()
-    @argument(
-        "--model",
-        "-m",
-        type=str,
-        default=None,
-        help="The model to be used for the chat interface.",
-    )
-    @argument(
-        "--history",
-        "-h",
-        action="store_true",
-        help="Whether to use history for the code.",
-    )
-    @argument(
-        "--program",
-        "-p",
-        type=Any,
-        default=None,
-        help="The program to be used for the chat interface.",
-    )
-    @argument(
-        "--safe",
-        "-s",
-        action="store_true",
-        help="Activate safe Mode that the code won't be automatically executed.",
-    )
-    @argument(
-        "--verbose",
-        "-v",
-        action="store_true",
-        help="Whether to set slient=True for guidance calls.",
-    )
-    @line_cell_magic
-    def mimicPythonOG(self, line, cell=None):
-        args = parse_argstring(self.chat, line)
-
-        overall_sys_prompt = """
-                     You are a Medical AI Research Assistant, helping a Clinical Researcher do analysis on their dataframe.
-                     If the conversation doesn't require python code at this moment, and you can answer based on conversation history, simply respond based on the past conversation and your knowledge of the dataset.                     
-                     If needed, respond to the Clinical Researcher with python code to help them perform their analysis. If needed, assume the past dataset is in a dataframe called 'df'.
-                     Don't assume anything about the datatypes in the df, because most of them are likely strings. Convert or check datatypes as needed to make a robust analysis.
-                     """
-
-
+        #This line-magic allows you to see what is being fed to the LLM
+        #Note, this requires only one '%', and not '%%'
         if cell is None:
             return
         current_message = cell
 
         context = get_notebook_ordered_history(current_message, os.getenv('NOTEBOOK_NAME'))
-        
-        program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt, llm_responses)
+        print(context)
 
-        print(program_out)
-
-        execution_id = self.shell.execution_count
-
-        sys_prompt = """You are an expert coder. 
-        If the text/code sent to you contains python code, respond with only the python code found. If no python code found, respond only with 'NO PYTHON CODE FOUND'.
-        Don't assume the datatypes in the table are anything. Assume in any df, that all values are strings and convert them to numbers as necessary.
-        No comments. Should be directly executable. Assume we already have the dataframe called 'df', if one is needed. 
-        If python code found, reformulate and return the python code so that it returns a variable called 'answer'.
-        """
-
-        contains_python = query_llm(program_out, sys_prompt)
-        if contains_python != "NO PYTHON CODE FOUND": 
-
-            #Now that we got the code, lets analyze our df, need to retrieve from session state dict            
-            #And then we will execute the code on the fly
-            # print("Going to exec", contains_python)
-
-            try:
-                df = self.shell.user_ns['df']
-                context = {'df': df}
-                # print("SHAPAE OF THINGS", df.shape)
-                # print(df['gender'].value_counts())
-                exec(contains_python, globals(), context)
-                answer = context.get('answer', None)
-
-            except Exception as e:
-                print("GOT EXCEPTION", e)
-                exec(contains_python, globals())
-                answer = context.get('answer')
-
-            calculated_answer_string = f"Result : {answer}"
-            print("\n")
-            print(calculated_answer_string)
-        else:
-            # print(program_out)
-            calculated_answer_string = ""
-
-        to_llm_history = program_out + "\n" + calculated_answer_string
-        llm_responses.append(to_llm_history)
-
-        program_out = f"# Assistant Code for Cell [{execution_id}]:\n" #+ program_out + "\n" + calculated_answer_string + "\n"
-        # self.shell.set_next_input(program_out)
+        print("\n", "-"*50, "\n")
+        encoding = tiktoken.encoding_for_model("gpt-4")
+        num_tokens = len(encoding.encode(context))
+        print(f"Current history is {num_tokens} tokens!")
 
 
 
@@ -691,7 +449,7 @@ Will add more soon.
                      You are a Medical AI Research Assistant, helping a Clinical Researcher do analysis on their dataframe.
 
                      If possible, respond to the Clinical Researcher with python code to help them perform their analysis. Assume the past dataset is in a dataframe called 'df'.
-                     Don't assume anything about the datatypes in the df, because most of them are likely strings. Convert or check datatypes as needed to make a robust analysis.
+                     !Don't assume anything about the datatypes in the df, because most of them are likely strings. Convert those strings as needed!
                      Any python code should end in a print statement showing the result.
                      If the conversation doesn't require python code at this moment, simply respond based on the past conversation and your knowledge of the dataset.     
 
@@ -707,7 +465,7 @@ Will add more soon.
 
         context = get_notebook_ordered_history(current_message, os.getenv('NOTEBOOK_NAME'))
         
-        program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt, llm_responses)
+        program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt)
         #regex to get rid of Python in the response
         #sql_pattern = r'```sql\n(.*?)\n```'
         # print("GOT RAW PROGRAM", program_out)
@@ -724,6 +482,8 @@ Will add more soon.
 
         if len(python_code) > 0:
             self.shell.set_next_input(f'##AI-generated-code\n\n{python_code[0]}')
+
+
 
     @magic_arguments()
     @argument(
@@ -758,12 +518,6 @@ Will add more soon.
         action="store_true",
         help="Whether to set slient=True for guidance calls.",
     )
-    # @argument(
-    # "--notebook_name",  # Add this line for the new argument
-    # type=str,           # Specify the argument type (str in this case)
-    # default=None,       # Provide a default value if desired
-    # help="The name of the notebook."
-    # )
     @line_cell_magic
     def runSQL(self, line, cell=None):
         args = parse_argstring(self.runSQL, line)
@@ -771,79 +525,14 @@ Will add more soon.
         if cell is None:
             return
         current_message = cell
-        
-        #error if notebook name not provided
-        # if args.notebook_name is None:
-        #     display("Error: Notebook name not provided as an argument in mimicSQL command. Use syntax: %%mimicSQL --notebook_name notebookNameHere.ipynb",)
-        #     return
 
-        execution_id = self.shell.execution_count
-
-        df, sql_query = sql_query_to_athena_df(current_message)
+        #retrieve the df, and put it in notebook memory
+        df, _ = sql_query_to_athena_df(current_message)
         display(df.head(5))
         self.shell.user_ns['df'] = df
 
+        #add only the first two rows to llm_responses
         first_two_rows_str = df.head(2).to_string()
-        to_llm_history = "First two rows of the df below:" + "\n" + first_two_rows_str        
-        llm_responses.append(to_llm_history)
-
-
-    @line_magic
-    def chapyter_load_agent(self, line=None):
-        """Reload the chapyter agent with all the configurations"""
-        pass
-
-    @line_magic
-    def chapyter(self, line):
-        """Used for displaying and modifying Chapyter Agent configurations.
-
-        Exemplar usage:
-
-        - %chapyter
-          print all the configurable parameters and its current value
-
-        - %chapyter <parameter_name>
-          print the current value of the parameter
-
-        - %chapyter <parameter_name>=<value>
-          set the value of the parameter
-        """
-
-        # This code is inspired by the %config magic command in IPython
-        # See the code here: https://github.com/ipython/ipython/blob/6b17e43544316d691376e35e677032a4b00d6eeb/IPython/core/magics/config.py#L36
-
-        # remove text after comments
-        line = line.strip().split("#")[0].strip()
-
-        all_class_configs = self.class_own_traits()
-
-        if not line or line.startswith("#"):
-            help = self.class_get_help(self)
-            # strip leading '--' from cl-args:
-            help = re.sub(re.compile(r"^--", re.MULTILINE), "", help)
-            print(help)
-            return
-        elif line in all_class_configs.keys():
-            return getattr(self, line)
-        elif "=" in line and line.split("=")[0].strip() in all_class_configs.keys():
-            cfg = Config()
-            exec(f"cfg.{self.__class__.__name__}." + line, self.shell.user_ns, locals())
-            self.update_config(cfg)
-        elif line.startswith("help"):
-            print(
-                "The %chapyter magic command supports the following usage:\n"
-                "- %chapyter\n  print all the configurable parameters and its current value\n"
-                "- %chapyter <parameter_name>\n  print the current value of the parameter\n"
-                "- %chapyter <parameter_name>=<value>\n  set the value of the parameter"
-            )
-        else:
-            raise UsageError(
-                f"Invalid usage of the chapyter command: {line}. "
-                "It supports the following usage:\n"
-                "- %chapyter\n  print all the configurable parameters and its current value\n"
-                "- %chapyter <parameter_name>\n  print the current value of the parameter\n"
-                "- %chapyter <parameter_name>=<value>\n  set the value of the parameter"
-            )
 
 
 def load_ipython_extension(ipython):

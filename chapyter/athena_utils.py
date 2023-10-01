@@ -1,29 +1,22 @@
 import pandas as pd
 import openai
-import matplotlib
-import scipy
 import boto3
-import os
 import time
 import matplotlib.pyplot as plt
 
 from tabulate import tabulate
 
 from langchain.chat_models import ChatOpenAI
-from langchain import PromptTemplate, LLMChain
-from langchain.prompts.chat import (
-    ChatPromptTemplate,
-    SystemMessage,
-    AIMessage,
-    HumanMessage,
-)
+
 
 DATABASE = 'mimiciii'
 S3_BUCKET = 's3://emmett-athena-bucket/'
 AWS_REGION = 'us-east-1'
 
+
 LLM = ChatOpenAI(model_name="gpt-4", max_tokens=2000)
 # LLM = ChatOpenAI(model_name="gpt-3.5-turbo", max_tokens=2000)
+
 
 client = boto3.client('athena', region_name=AWS_REGION)
 
@@ -54,8 +47,8 @@ def sql_query_to_athena_df(query):
         }
     )
 
+    #Polls Athena until we finally get a response!
     query_execution_id = response['QueryExecutionId']
-
     while True:
         response = client.get_query_execution(QueryExecutionId=query_execution_id)
         if response['QueryExecution']['Status']['State'] in ['SUCCEEDED', 'FAILED', 'CANCELLED']:
@@ -65,10 +58,8 @@ def sql_query_to_athena_df(query):
     df = pd.DataFrame()
 
     if response['QueryExecution']['Status']['State'] == 'SUCCEEDED':
-        # Initialize pagination token
         next_token = None
     else:
-        # Log the state of the query execution
         state = response['QueryExecution']['Status']['State']
         print(f"Query failed! State: {state}")
         
@@ -77,15 +68,11 @@ def sql_query_to_athena_df(query):
             reason = response['QueryExecution']['Status']['StateChangeReason']
             print(f"Reason: {reason}")
         
-        # Optionally, you can also log the entire response object for more details
-        # import json
-        # print(json.dumps(response, indent=2))
-
         return False, reason
 
         
+    #Paginates to get all results from Athena query, and collect them
     while True:
-        # print("PAGINATING")
         if next_token:
             result_data = client.get_query_results(QueryExecutionId=query_execution_id, NextToken=next_token)
         else:

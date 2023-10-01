@@ -6,46 +6,21 @@
 import dataclasses
 import re
 from typing import Any, Callable, Dict, Optional
-import openai
 import nbformat
 import os
 import matplotlib.pyplot as plt
 
-
+from .athena_utils import query_llm
 
 import guidance
 from IPython.core.interactiveshell import InteractiveShell
+from IPython.display import display, HTML, Markdown
 
 __all__ = [
     "ChapyterAgentProgram",
     "_DEFAULT_HISTORY_PROGRAM",
 ]
 
-
-#tiny comment
-def extract_code_blocks(text):
-    # Regular expression pattern to match code blocks between triple backticks
-    pattern = r"```(.*?)```"
-    
-    # Use re.DOTALL to make sure '.' matches newline characters as well
-    matches = re.findall(pattern, text, re.DOTALL)
-    
-    # Strip any leading or trailing whitespace from each match and return as a list
-    return [match.strip() for match in matches]
-
-
-def query_llm(llm_prompt, sys_prompt):
-    response = openai.ChatCompletion.create(
-        model='gpt-4',
-        messages=[
-            {"role": "system", "content": sys_prompt},
-            {"role": "user", "content": llm_prompt}
-        ],
-        max_tokens=1000,
-        temperature=0.1,
-    )
-    response = response["choices"][0]["message"]["content"]
-    return response
 
 
 @dataclasses.dataclass
@@ -60,14 +35,9 @@ class ChapyterAgentProgram:
         self.post_call_hooks = self.post_call_hooks or {}
 
     #This is step 3, execute
-    def execute(self, message: str, llm: str, shell: InteractiveShell, sys_prompt: str, llm_responses: list, **kwargs) -> str:
+    def execute(self, message: str, llm: str, shell: InteractiveShell, sys_prompt: str) -> str:
 
         llm_response = query_llm(message, sys_prompt)
-
-        # print("\n\n")
-        # print(llm_prompt, "\n\n")
-        # print("AI response: ")
-        # print(llm_response)
 
         return llm_response
 
@@ -113,42 +83,26 @@ def clean_response_str(raw_response_str: str):
     return "\n".join(all_converted_str)
 
 
-def clean_execution_history(s):
-    # Remove triple backticks
-    s = s.replace('```', '')
-    
-    # Remove leading and closing newline characters
-    s = s.strip()
-    
-    # Remove the %%mimic --safe -h
-    s = s.replace('%%mimicSQL', '').strip()
-    s = s.replace('%%mimicPython', '').strip()
-    s = s.replace('%%mimicPython2', '').strip()
-
-    
-    return s
-
-
-import nbformat
-
-import pprint
-
-import pandas as pd
-
-from IPython.core.display import display, HTML
-
-
 def extract_table(outputs):
     for output in outputs:
         if 'data' in output and 'text/plain' in output['data']:
             return output['data']['text/plain']
     return None
 
+
 def extract_text(outputs):
     for output in outputs:
         if 'text' in output:
             return output['text']
     return None
+
+
+def strip_newlines(text):
+    try:
+        return text.strip("\n")
+    except:
+        # This means it's not a string
+        return text
 
 
 def get_notebook_ordered_history(current_message, notebook_name):
@@ -170,8 +124,6 @@ def get_notebook_ordered_history(current_message, notebook_name):
     top_to_bottom_human_cells_inputs = []
     top_to_bottom_human_cells_output_tables = []
     top_to_bottom_human_cells_output_text = []
-
-    # print("CELLS", nb.cells)
 
     for cell in nb.cells:
         
@@ -204,32 +156,44 @@ def get_notebook_ordered_history(current_message, notebook_name):
     context = "="*60
     context += "\n"
     for human_input, AI_text, AI_table in zip(top_to_bottom_human_cells_inputs, top_to_bottom_human_cells_output_text, top_to_bottom_human_cells_output_tables):
-        # print("In loop")
+
+        AI_text = strip_newlines(AI_text)
+        human_input = strip_newlines(human_input)
+
         context += f"**Clinical Researcher:** {human_input}\n\n"
         if AI_table != None:
-            context += f"**AI Research Assistant:** {AI_text}\n{AI_table}\n\n"
+            context += f"**AI Research Assistant:** {AI_text}\n{AI_table}\n"
         else:
-            context += f"**AI Research Assistant:** {AI_text}\n\n"
+            context += f"**AI Research Assistant:** {AI_text}\n"
         context += "="*60
-        context += "\n\n"
+        context += "\n"
 
-    # print(top_to_bottom_human_cells_inputs)
-    # print(top_to_bottom_human_cells_outputs)
-    # print([raw_llm_output_dict[i] for i in top_to_bottom_execution_counts])
 
     context += f"**Clinical Researcher:** {top_to_bottom_human_cells_inputs[-1]}\n\n"
     context += f"**AI Research Assistant:**"
 
-
-
-
-    from IPython.display import display, Markdown
-
-    # print("Seeing pre-prompt")
-    # display(Markdown(context))
-    # print(context)
-
     return context
+
+
+##############################################################################
+##############################OLD CHAPYTER STUFF##############################
+##############################################################################
+
+
+def clean_execution_history(s):
+    # Remove triple backticks
+    s = s.replace('```', '')
+    
+    # Remove leading and closing newline characters
+    s = s.strip()
+    
+    # Remove the %%mimic --safe -h
+    s = s.replace('%%mimicSQL', '').strip()
+    s = s.replace('%%mimicPython', '').strip()
+    s = s.replace('%%mimicPython2', '').strip()
+    
+    return s
+
 
 def get_execution_history(ipython, get_output=True, width=4):
     def limit_output(output, limit=100):
