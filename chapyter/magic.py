@@ -455,7 +455,10 @@ Will add more soon.
 
                      Include ALL modules used.
 
-                     All python code should be returned between two sets of triple ticks.                
+                     All python code should be returned between the characters "```". In other words, your response should contain the following: 
+                     ```
+                     INSERT PYTHON CODE HERE
+                     ```                        
                      """
 
 
@@ -466,19 +469,36 @@ Will add more soon.
         context = get_notebook_ordered_history(current_message, os.getenv('NOTEBOOK_NAME'))
         
         program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt)
-        #regex to get rid of Python in the response
-        #sql_pattern = r'```sql\n(.*?)\n```'
-        # print("GOT RAW PROGRAM", program_out)
-        program_out_noPython_list = program_out.split("```")
-        program_out_noPython_list = [s for s in program_out_noPython_list if not s.startswith("python")]
-        program_out_noPython = "".join(program_out_noPython_list)
-        program_out_noPython = re.sub(r'\n+', '\n\n', program_out_noPython)
-        print(program_out_noPython)
+        sys_prompt = """You are an expert coder. 
+            If the text/code sent to you contains python code, respond with only the python code found. 
+            Don't assume the datatypes in the table are anything. Assume in any df, that all values are strings and convert them to numbers as necessary.
+            No comments. Should be directly executable. Assume we already have the dataframe called 'df', if one is needed. 
+            MUST return a variable called 'answer' Otherwise respond only 'NO PYTHON CODE FOUND'.
+            """
 
+        contains_python = query_llm(program_out, sys_prompt, model='gpt-3.5-turbo')
+        if contains_python != "NO PYTHON CODE FOUND":
+            try:
+                df = self.shell.user_ns['df']
+                context = {'df': df}
+                exec(contains_python, globals(), context)
+                answer = context.get('answer', None)
 
-        #find the element with python code
-        python_code = [s for s in program_out.split("```") if s.startswith("python")]
-        python_code = [s[6:] if s.startswith("python") else s for s in python_code]
+            except:
+                exec(contains_python, globals())
+                answer = context.get('answer')
+
+            calculated_answer_string = f"Result : {answer}"
+            print(calculated_answer_string)
+        else:
+            print(program_out)
+            calculated_answer_string = ""
+
+        #to_llm_history = program_out + "\n" + calculated_answer_string
+        #llm_responses.append(to_llm_history)
+
+        program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + program_out + "\n" + calculated_answer_string + "\n"
+        self.shell.set_next_input(program_out)
 
         if len(python_code) > 0:
             self.shell.set_next_input(f'##AI-generated-code\n\n{python_code[0]}')
