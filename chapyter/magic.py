@@ -481,7 +481,7 @@ Will add more soon.
             No comments. Should be directly executable. Assume we already have the dataframe called 'df', if one is needed. 
             MUST return a variable called 'answer' Otherwise respond only 'NO PYTHON CODE FOUND'.
             """
-            result_from_llm = query_llm(program_out, sys_prompt)
+            result_from_llm = query_llm(program_out, sys_prompt, model_name="gpt-3.5-turbo")
             if result_from_llm != "NO PYTHON CODE FOUND":
                 python_code = [result_from_llm]
 
