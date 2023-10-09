@@ -461,49 +461,53 @@ Will add more soon.
                      ```                        
                      """
 
-
         if cell is None:
             return
         current_message = cell
 
         context = get_notebook_ordered_history(current_message, os.getenv('NOTEBOOK_NAME'))
-        
+
         program_out = self.execute_chat(context, args, self.shell, overall_sys_prompt)
-        sys_prompt = """You are an expert coder. 
+
+        # First, check for code between "```"
+        python_code = [s for s in program_out.split("```") if s and not s.startswith("python")]
+
+        # If python_code's length is zero, use query_llm method
+        if len(python_code) == 0:
+            sys_prompt = """
+            You are an expert coder. 
             If the text/code sent to you contains python code, respond with only the python code found. 
             Don't assume the datatypes in the table are anything. Assume in any df, that all values are strings and convert them to numbers as necessary.
             No comments. Should be directly executable. Assume we already have the dataframe called 'df', if one is needed. 
             MUST return a variable called 'answer' Otherwise respond only 'NO PYTHON CODE FOUND'.
             """
+            result_from_llm = query_llm(program_out, sys_prompt)
+            if result_from_llm != "NO PYTHON CODE FOUND":
+                python_code = [result_from_llm]
 
-        contains_python = query_llm(program_out, sys_prompt, model='gpt-3.5-turbo')
-        if contains_python != "NO PYTHON CODE FOUND":
-            try:
-                df = self.shell.user_ns['df']
-                context = {'df': df}
-                exec(contains_python, globals(), context)
-                answer = context.get('answer', None)
+        # Subtract the python_code from program_out to get program_out_noPython
+        program_out_noPython = program_out
+        for code in python_code:
+            program_out_noPython = program_out_noPython.replace(code, "")
 
-            except:
-                exec(contains_python, globals())
-                answer = context.get('answer')
+        # Continue with the rest of the function...
 
-            calculated_answer_string = f"Result : {answer}"
-            print(calculated_answer_string)
-        else:
-            print(program_out)
-            calculated_answer_string = ""
+        # Now subtract the python_code from program_out to get program_out_noPython
+        program_out_noPython = program_out
+        for code in python_code:
+            # Try subtracting the code as it is from program_out_noPython
+            if code in program_out_noPython:
+                program_out_noPython = program_out_noPython.replace(code, "")
+            # If that doesn't work, try subtracting it with the "```" wrapping
+            else:
+                program_out_noPython = program_out_noPython.replace(f"```{code}```", "")
 
-        #to_llm_history = program_out + "\n" + calculated_answer_string
-        #llm_responses.append(to_llm_history)
+        program_out_noPython = re.sub(r'\n+', '\n\n', program_out_noPython)
+        print(program_out_noPython)
 
-        program_out = f"# Assistant Code for Cell [{execution_id}]:\n" + program_out + "\n" + calculated_answer_string + "\n"
-        self.shell.set_next_input(program_out)
 
         if len(python_code) > 0:
             self.shell.set_next_input(f'##AI-generated-code\n\n{python_code[0]}')
-
-
 
     @magic_arguments()
     @argument(
