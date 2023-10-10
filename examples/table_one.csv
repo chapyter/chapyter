@@ -1,0 +1,19 @@
+Variable,Men (n = 4256),Women (n = 3485)
+Race                          ,,
+        White                         ,3129 (73.52%),2515 (72.17%)
+        Black/African American        ,338 (7.94%),423 (12.14%)
+        Hispanic Or Latino            ,134 (3.15%),58 (1.66%)
+        Asian                         ,87 (2.04%),60 (1.72%)
+        Other                         ,81 (1.90%),75 (2.15%)
+ICU Type                      ,,
+        CCU                           ,374 (8.79%),271 (7.78%)
+        MICU                          ,2932 (68.89%),2537 (72.80%)
+        CSRU                          ,154 (3.62%),79 (2.27%)
+        SICU                          ,527 (12.38%),422 (12.11%)
+Surgery Type                  ,,
+        Elective                      ,138 (3.24%),73 (2.09%)
+        Emergency                     ,4054 (95.25%),3357 (96.33%)
+        Urgent                        ,64 (1.50%),55 (1.58%)
+Lab Values                    ,,
+        First Lactate                 ,2.3 (1.5 - 3.6),2.3 (1.5 - 3.6)
+        First Creatinine              ,1.5 (1.1 - 2.7),1.3 (0.8 - 2.2)
