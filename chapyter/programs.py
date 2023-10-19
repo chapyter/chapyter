@@ -172,6 +172,7 @@ def get_notebook_ordered_history(current_message, notebook_name):
     context += f"**Clinical Researcher:** {top_to_bottom_human_cells_inputs[-1]}\n\n"
     context += f"**AI Research Assistant:**"
 
+    print("Context: ", context)
     return context
 
 
