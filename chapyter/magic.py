@@ -2,8 +2,6 @@ import argparse
 import logging
 import os
 import re
-import numpy as np
-import pandas as pd
 from typing import Any
 
 from IPython.display import display, Javascript
@@ -530,40 +528,7 @@ Will add more soon.
 
         #retrieve the df, and put it in notebook memory
         df, _ = sql_query_to_athena_df(current_message)
-
-        # display(df.head(5))
-        # Only display the deidentified first 5 rows:
-        column_names = df.columns
-        column_dtypes = df.dtypes
-
-        random_data = {}
-
-        n_rows = 5  # Number of rows to randomize
-
-        for col, dtype in zip(column_names, column_dtypes):
-            if np.issubdtype(dtype, np.number):
-                random_data[col] = np.random.rand(n_rows) * (df[col].max() - df[col].min()) + df[col].min()
-            elif np.issubdtype(dtype, np.bool_):
-                random_data[col] = np.random.choice([True, False], n_rows)
-            elif np.issubdtype(dtype, np.object):  # Assuming object dtype is for strings
-                unique_strings = df[col].unique()
-                random_data[col] = np.random.choice(unique_strings, n_rows)
-            elif np.issubdtype(dtype, np.datetime64):
-                min_date = df[col].min()
-                max_date = df[col].max()
-                random_data[col] = pd.date_range(min_date, max_date, periods=n_rows).to_numpy()
-            else:
-                # Handle other data types if needed
-                pass
-
-        df_deid = pd.DataFrame(random_data)
-
-        #print("Data types of each column in df_deid:")
-        #print(df_deid.dtypes)
-
-        # Display the first 10 rows of the new DataFrame
-        display(df_deid.head(10))
-
+        display(df.head(5))
         self.shell.user_ns['df'] = df
 
         #add only the first two rows to llm_responses
